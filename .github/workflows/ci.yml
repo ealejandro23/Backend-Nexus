@@ -1,4 +1,4 @@
-name: CI/CD Pipeline - Nexo Recommender
+name: CI/CD Pipeline - Backend Nexus
 
 on:
   pull_request:
@@ -11,7 +11,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: nexo-recommender
+  IMAGE_NAME: nexo-recommender/backend
 
 jobs:
   # ===========================================================================
@@ -19,9 +19,6 @@ jobs:
   # ===========================================================================
   test:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        service: [ia, dominio, datos]
     
     steps:
     - uses: actions/checkout@v4
@@ -35,22 +32,11 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install pytest pytest-cov
-        if [ "${{ matrix.service }}" = "ia" ]; then
-          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-          pip install -r ia/requirements.txt
-        elif [ "${{ matrix.service }}" = "dominio" ]; then
-          pip install -r dominio/requirements.txt
-        else
-          pip install pandas numpy scikit-learn joblib
-        fi
+        pip install pandas numpy scikit-learn joblib psycopg2-binary
     
     - name: Run tests
       run: |
-        if [ "${{ matrix.service }}" = "ia" ]; then
-          pytest ia/tests/ -v --cov=ia
-        elif [ "${{ matrix.service }}" = "dominio" ]; then
-          pytest dominio/tests/ -v --cov=dominio
-        else
+        if [ -d "datos/tests" ]; then
           pytest datos/tests/ -v --cov=datos
         fi
 
@@ -65,10 +51,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    
-    strategy:
-      matrix:
-        service: [gateway, front, ia, dominio, carga]
     
     steps:
     - uses: actions/checkout@v4
@@ -87,7 +69,7 @@ jobs:
       id: meta
       uses: docker/metadata-action@v5
       with:
-        images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
         tags: |
           type=sha,prefix=sha-
           type=raw,value=latest
@@ -95,7 +77,7 @@ jobs:
     - name: Build and push
       uses: docker/build-push-action@v5
       with:
-        context: ./${{ matrix.service }}
+        context: .
         push: true
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
@@ -115,10 +97,6 @@ jobs:
       contents: read
       packages: write
     
-    strategy:
-      matrix:
-        service: [gateway, front, ia, dominio, carga]
-    
     steps:
     - uses: actions/checkout@v4
     
@@ -130,11 +108,11 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
     
     - name: Pull latest image
-      run: docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:latest
+      run: docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
     
     - name: Tag as ep2
       run: |
-        docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:latest ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:ep2
+        docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:ep2
     
     - name: Push ep2 tag
-      run: docker push ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:ep2
+      run: docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:ep2
