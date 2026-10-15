@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: BackendNexusRetail
+  profiles:
+    active: dev            # en producción: SPRING_PROFILES_ACTIVE=prod (no carga datos de prueba)
+  datasource:
+    url: jdbc:postgresql://localhost:5432/nexus_retail
+    username: ${DB_USER:nexus}
+    password: ${DB_PASSWORD:nexus}
+  jpa:
+    hibernate:
+      ddl-auto: update      # solo para desarrollo; luego migrar a Flyway y usar "validate"
+    open-in-view: false
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 100ms        # el camino caliente no puede esperar a Redis
+  threads:
+    virtual:
+      enabled: true         # Java 21: alta concurrencia sin programación reactiva
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+
+app:
+  recommendation:
+    result-size: 8          # productos que se devuelven
+    candidate-pool: 50      # candidatos que se piden a Redis antes de filtrar por stock
+    stock-buffer: 3         # stock <= 3 se considera NO disponible (el ERP tiene hasta 30 min de atraso)
+    pilot-percentage: 20    # % del tráfico que ve las recomendaciones
+    experiment-salt: nexus-pilot-1
