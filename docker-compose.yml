@@ -18,7 +18,7 @@ services:
   # GATEWAY - Único punto de entrada (puerto 8080)
   # ===========================================================================
   gateway:
-    image: ghcr.io/nexo-recommender/gateway:ep2
+    image: ghcr.io/FranAlarcon24/gateway:ep2
     container_name: equipo02-gateway
     ports:
       - "8080:8080"
@@ -47,7 +47,7 @@ services:
   # FRONT - Interfaz de usuario (Streamlit)
   # ===========================================================================
   front:
-    image: ghcr.io/nexo-recommender/front:ep2
+    image: ghcr.io/ealejandro23/front:ep2
     container_name: equipo02-front
     environment:
       - API_GATEWAY_URL=http://gateway:8080
@@ -72,7 +72,7 @@ services:
   # MICROSERVICIO DE IA - Modelo PyTorch
   # ===========================================================================
   ia:
-    image: ghcr.io/nexo-recommender/ia:ep2
+    image: ghcr.io/ealejandro23/ia:ep2
     container_name: equipo02-ia
     environment:
       - MODEL_PATH=/app/modelo_entrenado.pkl
@@ -94,7 +94,7 @@ services:
   # MICROSERVICIO DE DOMINIO - Lógica de negocio (RÉPLICA 1)
   # ===========================================================================
   dominio:
-    image: ghcr.io/nexo-recommender/dominio:ep2
+    image: ghcr.io/ealejandro23/dominio:ep2
     container_name: equipo02-dominio-1
     environment:
       - DB_HOST=db
@@ -126,7 +126,7 @@ services:
   # MICROSERVICIO DE DOMINIO - RÉPLICA 2 (Balanceo de carga)
   # ===========================================================================
   dominio2:
-    image: ghcr.io/nexo-recommender/dominio:ep2
+    image: ghcr.io/ealejandro23/dominio:ep2
     container_name: equipo02-dominio-2
     environment:
       - DB_HOST=db
@@ -184,8 +184,9 @@ services:
   # CARGA DE DATOS - Servicio one-shot
   # ===========================================================================
   carga:
-    image: ghcr.io/nexo-recommender/carga:ep2
+    image: ghcr.io/ealejandro23/backend:ep2
     container_name: equipo02-carga
+    command: ["python", "carga/cargar.py"]
     environment:
       - DB_HOST=db
       - DB_PORT=5432
