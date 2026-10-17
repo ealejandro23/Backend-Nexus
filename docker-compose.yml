@@ -16,7 +16,7 @@ services:
   # GATEWAY - Único punto de entrada (puerto 8080)
   # ===========================================================================
   gateway:
-    image: ghcr.io/FranAlarcon24/gateway:ep2
+    image: ghcr.io/fran-alarcon24/gateway:ep2
     container_name: equipo02-gateway
     ports:
       - "8080:8080"
