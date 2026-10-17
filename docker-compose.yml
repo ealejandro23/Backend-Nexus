@@ -11,8 +11,6 @@
 # ITY1102 - Arquitectura de Sistemas de Inteligencia Artificial
 # =============================================================================
 
-version: "3.8"
-
 services:
   # ===========================================================================
   # GATEWAY - Único punto de entrada (puerto 8080)
@@ -51,9 +49,6 @@ services:
     container_name: equipo02-front
     environment:
       - API_GATEWAY_URL=http://gateway:8080
-    depends_on:
-      gateway:
-        condition: service_healthy
     networks:
       - nexo-network
     restart: unless-stopped
