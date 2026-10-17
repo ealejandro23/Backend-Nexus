@@ -1,0 +1,219 @@
+# =============================================================================
+# DOCKER COMPOSE - NEXO RECOMMENDER SYSTEM
+# =============================================================================
+# Sistema de recomendación de productos con arquitectura de microservicios.
+#
+# Para levantar el sistema:
+#   docker compose -p equipo02 pull
+#   docker compose -p equipo02 up -d
+#
+# Equipo: 2
+# ITY1102 - Arquitectura de Sistemas de Inteligencia Artificial
+# =============================================================================
+
+version: "3.8"
+
+services:
+  # ===========================================================================
+  # GATEWAY - Único punto de entrada (puerto 8080)
+  # ===========================================================================
+  gateway:
+    image: ghcr.io/nexo-recommender/gateway:ep2
+    container_name: equipo02-gateway
+    ports:
+      - "8080:8080"
+    depends_on:
+      front:
+        condition: service_healthy
+      ia:
+        condition: service_healthy
+      dominio:
+        condition: service_healthy
+    networks:
+      - nexo-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 64M
+
+  # ===========================================================================
+  # FRONT - Interfaz de usuario (Streamlit)
+  # ===========================================================================
+  front:
+    image: ghcr.io/nexo-recommender/front:ep2
+    container_name: equipo02-front
+    environment:
+      - API_GATEWAY_URL=http://gateway:8080
+    depends_on:
+      gateway:
+        condition: service_healthy
+    networks:
+      - nexo-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+
+  # ===========================================================================
+  # MICROSERVICIO DE IA - Modelo PyTorch
+  # ===========================================================================
+  ia:
+    image: ghcr.io/nexo-recommender/ia:ep2
+    container_name: equipo02-ia
+    environment:
+      - MODEL_PATH=/app/modelo_entrenado.pkl
+    networks:
+      - nexo-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+
+  # ===========================================================================
+  # MICROSERVICIO DE DOMINIO - Lógica de negocio (RÉPLICA 1)
+  # ===========================================================================
+  dominio:
+    image: ghcr.io/nexo-recommender/dominio:ep2
+    container_name: equipo02-dominio-1
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=nexo
+      - DB_USER=nexo
+      - DB_PASSWORD=nexo123
+      - IA_SERVICE_URL=http://ia:8000
+    depends_on:
+      db:
+        condition: service_healthy
+      ia:
+        condition: service_healthy
+    networks:
+      - nexo-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+
+  # ===========================================================================
+  # MICROSERVICIO DE DOMINIO - RÉPLICA 2 (Balanceo de carga)
+  # ===========================================================================
+  dominio2:
+    image: ghcr.io/nexo-recommender/dominio:ep2
+    container_name: equipo02-dominio-2
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=nexo
+      - DB_USER=nexo
+      - DB_PASSWORD=nexo123
+      - IA_SERVICE_URL=http://ia:8000
+    depends_on:
+      db:
+        condition: service_healthy
+      ia:
+        condition: service_healthy
+    networks:
+      - nexo-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+
+  # ===========================================================================
+  # BASE DE DATOS - PostgreSQL
+  # ===========================================================================
+  db:
+    image: postgres:15-alpine
+    container_name: equipo02-db
+    environment:
+      - POSTGRES_DB=nexo
+      - POSTGRES_USER=nexo
+      - POSTGRES_PASSWORD=nexo123
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - nexo-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexo -d nexo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+
+  # ===========================================================================
+  # CARGA DE DATOS - Servicio one-shot
+  # ===========================================================================
+  carga:
+    image: ghcr.io/nexo-recommender/carga:ep2
+    container_name: equipo02-carga
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=nexo
+      - DB_USER=nexo
+      - DB_PASSWORD=nexo123
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - nexo-network
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+
+# =============================================================================
+# REDES
+# =============================================================================
+networks:
+  nexo-network:
+    driver: bridge
+
+# =============================================================================
+# VOLÚMENES
+# =============================================================================
+volumes:
+  db-data:
+    driver: local
