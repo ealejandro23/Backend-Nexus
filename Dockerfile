@@ -14,8 +14,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar requirements e instalar dependencias Python
-COPY carga/requirements.txt ./ 2>/dev/null || true
-RUN pip install --no-cache-dir pandas numpy scikit-learn joblib psycopg2-binary || true
+COPY carga/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar archivos del proyecto
 COPY . .
