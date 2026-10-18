@@ -84,6 +84,78 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
+  build-and-push-dominio:
+    needs: test
+    runs-on: ubuntu-latest
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || startsWith(github.ref, 'refs/tags/ep2')
+    
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Extract metadata
+      id: meta-dominio
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/ealejandro23/dominio
+        tags: |
+          type=sha,prefix=sha-
+          type=raw,value=latest
+    
+    - name: Build and push dominio image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./dominio/Dockerfile
+        push: true
+        tags: ${{ steps.meta-dominio.outputs.tags }}
+        labels: ${{ steps.meta-dominio.outputs.labels }}
+        platforms: linux/amd64
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  tag-ep2-dominio:
+    needs: build-and-push-dominio
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/ep2')
+    
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Pull latest dominio image
+      run: docker pull ${{ env.REGISTRY }}/ealejandro23/dominio:latest
+    
+    - name: Tag as ep2
+      run: |
+        docker tag ${{ env.REGISTRY }}/ealejandro23/dominio:latest ${{ env.REGISTRY }}/ealejandro23/dominio:ep2
+    
+    - name: Push ep2 tag
+      run: docker push ${{ env.REGISTRY }}/ealejandro23/dominio:ep2
+
   tag-ep2:
     needs: build-and-push
     runs-on: ubuntu-latest
