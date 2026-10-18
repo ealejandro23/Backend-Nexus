@@ -104,7 +104,7 @@ jobs:
       with:
         registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+        password: ${{ secrets.GHCR_PAT }}
     
     - name: Extract metadata
       id: meta-dominio
@@ -144,7 +144,7 @@ jobs:
       with:
         registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+        password: ${{ secrets.GHCR_PAT }}
     
     - name: Pull latest dominio image
       run: docker pull ${{ env.REGISTRY }}/ealejandro23/dominio:latest
