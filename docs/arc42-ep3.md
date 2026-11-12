@@ -403,6 +403,23 @@ Reglas cumplidas:
 - El workflow usa `GHCR_PAT` si existe y cae a `GITHUB_TOKEN` si no.
 - `concurrency` cancela ejecuciones viejas de la misma rama.
 
+### 5.6 Prueba de humo end-to-end
+
+Se levantó el stack real con `docker compose -p equipo02` usando las imágenes
+`:ep3` publicadas en GHCR (`db`, `rabbitmq`, `campanas`, `campanas-worker` y el
+servicio one-shot `carga`, que crea las tablas base).
+
+| Paso | Resultado |
+|---|---|
+| `GET /api/health` | `estado=ok`; `base_datos=ok`, `cola=ok`, `sagemaker=no_configurado`, `llm=no_configurado` |
+| `POST /api/campanas/U100000` | `202`, `estado=en_cola`, `job_id` UUID generado |
+| RabbitMQ | Job consumido; `campanas=0`, `campanas.dlq=0` |
+| `GET /api/campanas/U100000` | `200`, campaña con recomendaciones `audio` (0,82) y `video` (0,55) |
+| LLM sin clave | `degradado=true`, `motivo_degradado="NVIDIA_API_KEY no configurada"` |
+
+Esto valida en contenedores reales el encolado, el consumo por el worker, el
+modo degradado de la prueba 6 y la consulta posterior de la campaña.
+
 ---
 
 ## Anexo A: Referencias

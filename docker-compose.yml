@@ -364,6 +364,8 @@ services:
       - nexo-network
     restart: unless-stopped
     logging: *default-logging
+    healthcheck:
+      disable: true
     deploy:
       resources:
         limits:
