@@ -1,10 +1,41 @@
-# Nexo Recommender System - EP2
+# Nexo Recommender System - EP2 + EP3
 
 Sistema de recomendación de productos con arquitectura de microservicios para el caso Nexus Retail.
 
 **Equipo:** 2  
 **Curso:** ITY1102 - Arquitectura de Sistemas de Inteligencia Artificial  
-**Evaluación:** Evaluación Parcial 2
+**Evaluación:** Evaluaciones Parciales 2 y 3
+
+---
+
+## Novedades EP3 (infraestructura, worker del LLM y pipeline)
+
+La EP3 agrega el worker de campañas personalizadas con LLM y el despliegue en
+AWS. La parte de Esteban Gamboa incluye:
+
+| Pieza | Ubicación |
+|---|---|
+| Servicio de campañas + worker | `servicio-campanas/` |
+| Cola RabbitMQ y worker con timeout, reintentos 429 y modo degradado | `servicio-campanas/app/queue.py`, `app/llm.py` |
+| Anonimización antes del LLM | `servicio-campanas/app/anonymizer.py` |
+| `POST /api/campanas/{usuario}` y `GET /api/health` | `servicio-campanas/app/main.py` |
+| Borde TLS 80/443 | `edge/` |
+| EC2, S3, security group, Elastic IP y scripts de despliegue | `infra/` |
+| Pipeline con tests antes de publicar y tag `ep3` | `.github/workflows/ci.yml` |
+| Informe EP3 (apartados 3 y 5 + anexos A/B/C) | `docs/arc42-ep3.md` |
+
+Inicio rápido:
+
+```bash
+cp .env.example .env
+# completar NVIDIA_API_KEY, DB_PASSWORD, RABBITMQ_PASSWORD y ANONYMIZATION_SALT
+docker compose -p equipo02 pull
+docker compose -p equipo02 up -d
+curl -k https://localhost/api/health
+```
+
+Guía completa de AWS en [`infra/README.md`](infra/README.md).
+
 
 ---
 
@@ -435,6 +466,80 @@ Output (probabilidad 0-1)
 | transacciones | 19,011 |
 | usuarios | 4,000 |
 | clickstream | 29,077 |
+
+---
+
+## EP3: Worker de campañas con LLM
+
+### Componentes nuevos
+
+| Componente | Descripción |
+|---|---|
+| `servicio-campanas` (API) | FastAPI en `:8090`; encola jobs y expone health |
+| `servicio-campanas-worker` | Consume RabbitMQ y llama a SageMaker + NVIDIA |
+| `rabbitmq` | Cola durable `campanas` + DLQ `campanas.dlq` |
+| `edge` | Nginx con TLS, publica 80/443, enruta `/api/campanas` y `/api/health` |
+
+### Flujo de una campaña
+
+1. `POST /api/campanas/{usuario}` valida que el usuario exista y publica un job.
+2. El worker consume el job, lee perfil y predicciones desde PostgreSQL.
+3. Anonimiza el perfil (elimina PII y seudonimiza `usuario_id`).
+4. Consulta SageMaker (si está configurado) o usa las predicciones de la BD.
+5. Arma el prompt y llama a NVIDIA con timeout y reintentos ante 429.
+6. Guarda la campaña en `campanas` y, si hay bucket, la exporta a S3.
+7. Si el LLM falla, guarda una campaña de respaldo con `degradado=true`.
+
+### Variables de entorno
+
+Ver [`.env.example`](.env.example). Las mínimas para EP3:
+
+```env
+NVIDIA_API_KEY=nvapi-...
+ANONYMIZATION_SALT=<valor aleatorio largo>
+DB_PASSWORD=<clave>
+RABBITMQ_PASSWORD=<clave>
+SAGEMAKER_ENDPOINT_NAME=nexo-propension-ep3   # opcional
+S3_BUCKET=nexo-ep3-campanas-equipo2            # opcional
+```
+
+### Tests EP3
+
+```bash
+cd servicio-campanas
+pip install -r requirements-dev.txt
+pytest -v --cov=app
+```
+
+| Test | Qué valida |
+|---|---|
+| `test_anonymization.py` (Prueba 5) | No se filtra PII al prompt del LLM |
+| `test_llm_down.py` (Prueba 6) | 429/timeout/401 generan modo degradado sin caer |
+| `test_health.py` (propia) | Health independiente de DB, SageMaker, cola y LLM |
+| `test_campaigns_api.py` | Encolado, fallback en línea y consulta de campañas |
+
+### Pipeline EP3
+
+El workflow `.github/workflows/ci.yml`:
+
+1. Ejecuta tests de campañas y de datos **antes** de publicar.
+2. Construye y publica `backend`, `campanas` y `edge` en GHCR (`sha-` y `latest`).
+3. Al crear el tag `ep3`, publica el tag estable `:ep3` que usa el compose.
+
+Para publicar una entrega:
+
+```bash
+git tag -f ep3
+git push origin ep3 --force
+```
+
+### Seguridad
+
+- `.env` sólo existe en el servidor, con permisos `600` (nunca se versiona).
+- El LLM recibe únicamente datos agregados y un hash del usuario.
+- El security group expone 80/443 a Internet y 22 sólo a la IP del administrador.
+- Las imágenes se ejecutan como usuario no root (`appuser`, UID 10001).
+- El bucket S3 bloquea acceso público y exige TLS.
 
 ---
 

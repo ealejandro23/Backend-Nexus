@@ -1,0 +1,180 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Nexo Recommender EP3 - EC2 t3.medium con IP elástica, LabInstanceProfile,
+  security group 80/443 + SSH restringido y bucket S3 cifrado.
+
+Parameters:
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Par de llaves SSH existente en la cuenta (AWS Academy).
+  AllowedSSHCIDR:
+    Type: String
+    Default: 0.0.0.0/32
+    Description: CIDR permitido para SSH (usar la IP pública propia /32).
+  InstanceType:
+    Type: String
+    Default: t3.medium
+    AllowedValues: [t3.small, t3.medium, t3.large]
+  BucketName:
+    Type: String
+    Description: Nombre único global del bucket S3 de campañas.
+    AllowedPattern: "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
+  AmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+
+Resources:
+  NexoSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Nexo EP3 - HTTP/HTTPS publico y SSH restringido
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: HTTP publico (redirige a HTTPS)
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: HTTPS publico
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref AllowedSSHCIDR
+          Description: SSH solo desde la IP del administrador
+      Tags:
+        - Key: Name
+          Value: nexo-ep3-sg
+        - Key: Proyecto
+          Value: Nexo-Recommender
+        - Key: Evaluacion
+          Value: EP3
+
+  NexoInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      IamInstanceProfile: LabInstanceProfile
+      SecurityGroupIds:
+        - !GetAtt NexoSecurityGroup.GroupId
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 30
+            VolumeType: gp3
+            Encrypted: true
+            DeleteOnTermination: true
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          set -euxo pipefail
+          dnf install -y docker git awscli
+          systemctl enable --now docker
+          usermod -aG docker ec2-user
+          mkdir -p /usr/local/lib/docker/cli-plugins
+          curl -SL "https://github.com/docker/compose/releases/download/v2.32.4/docker-compose-linux-x86_64" \
+            -o /usr/local/lib/docker/cli-plugins/docker-compose
+          chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+          mkdir -p /opt/nexo
+          chown ec2-user:ec2-user /opt/nexo
+          echo "Nexo EP3 bootstrap OK" > /var/log/nexo-bootstrap.log
+      Tags:
+        - Key: Name
+          Value: nexo-ep3-app
+        - Key: Proyecto
+          Value: Nexo-Recommender
+        - Key: Evaluacion
+          Value: EP3
+        - Key: Rol
+          Value: infraestructura-worker-pipeline
+
+  NexoElasticIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: nexo-ep3-eip
+
+  NexoElasticIPAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt NexoElasticIP.AllocationId
+      InstanceId: !Ref NexoInstance
+
+  NexoBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      LifecycleConfiguration:
+        Rules:
+          - Id: AbortarCargasIncompletas
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+          - Id: RetenerCampanasUnAnio
+            Status: Enabled
+            ExpirationInDays: 365
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+      Tags:
+        - Key: Proyecto
+          Value: Nexo-Recommender
+        - Key: Evaluacion
+          Value: EP3
+
+  NexoBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref NexoBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenegarHTTPsinTLS
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !Sub "arn:aws:s3:::${NexoBucket}"
+              - !Sub "arn:aws:s3:::${NexoBucket}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+Outputs:
+  PublicIP:
+    Description: IP elástica del servidor
+    Value: !Ref NexoElasticIP
+  InstanceId:
+    Description: ID de la instancia EC2
+    Value: !Ref NexoInstance
+  SecurityGroupId:
+    Description: ID del security group
+    Value: !GetAtt NexoSecurityGroup.GroupId
+  BucketName:
+    Description: Bucket S3 de campañas
+    Value: !Ref NexoBucket
+  HealthURL:
+    Description: Health público
+    Value: !Sub "https://${NexoElasticIP}/api/health"
+  SSHCommand:
+    Description: Comando SSH de ejemplo
+    Value: !Sub "ssh -i ${KeyName}.pem ec2-user@${NexoElasticIP}"

@@ -1,186 +1,240 @@
-name: CI/CD Pipeline - Backend Nexus
+name: CI/CD Pipeline - Backend Nexus EP3
 
 on:
   pull_request:
     branches: [dev, main]
   push:
-    branches: [main]
+    branches: [main, dev]
   create:
     tags:
-      - 'ep2'
+      - 'ep3'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ealejandro23/backend
+  IMAGE_OWNER: ealejandro23
+
+permissions:
+  contents: read
+  packages: write
 
 jobs:
-  test:
+  # ===========================================================================
+  # TESTS - se ejecutan antes de cualquier publicación de imagen
+  # ===========================================================================
+  test-campanas:
+    name: Tests worker y campañas
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 15
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-    
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pytest pytest-cov
-        pip install pandas numpy scikit-learn joblib psycopg2-binary
-    
-    - name: Run tests
-      run: |
-        echo "Running tests..."
-        if [ -f "datos/tests/test_preparar.py" ]; then
-          pytest datos/tests/ -v --cov=datos 2>&1 || true
-        else
-          echo "No tests found, skipping..."
-        fi
-        echo "Tests step completed"
+      - uses: actions/checkout@v4
 
-  build-and-push:
-    needs: test
-    runs-on: ubuntu-latest
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || startsWith(github.ref, 'refs/tags/ep2')
-    
-    permissions:
-      contents: read
-      packages: write
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-    
-    - name: Log in to GitHub Container Registry
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Extract metadata
-      id: meta
-      uses: docker/metadata-action@v5
-      with:
-        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-        tags: |
-          type=sha,prefix=sha-
-          type=raw,value=latest
-    
-    - name: Build and push
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ./Dockerfile
-        push: true
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
-        platforms: linux/amd64
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: servicio-campanas/requirements-dev.txt
 
-  build-and-push-dominio:
-    needs: test
-    runs-on: ubuntu-latest
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || startsWith(github.ref, 'refs/tags/ep2')
-    
-    permissions:
-      contents: read
-      packages: write
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-    
-    - name: Log in to GitHub Container Registry
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GHCR_PAT }}
-    
-    - name: Extract metadata
-      id: meta-dominio
-      uses: docker/metadata-action@v5
-      with:
-        images: ${{ env.REGISTRY }}/ealejandro23/dominio
-        tags: |
-          type=sha,prefix=sha-
-          type=raw,value=latest
-    
-    - name: Build and push dominio image
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ./dominio/Dockerfile
-        push: true
-        tags: ${{ steps.meta-dominio.outputs.tags }}
-        labels: ${{ steps.meta-dominio.outputs.labels }}
-        platforms: linux/amd64
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+      - name: Instalar dependencias
+        working-directory: servicio-campanas
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
 
-  tag-ep2-dominio:
-    needs: build-and-push-dominio
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/ep2')
-    
-    permissions:
-      contents: read
-      packages: write
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Log in to GitHub Container Registry
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GHCR_PAT }}
-    
-    - name: Pull latest dominio image
-      run: docker pull ${{ env.REGISTRY }}/ealejandro23/dominio:latest
-    
-    - name: Tag as ep2
-      run: |
-        docker tag ${{ env.REGISTRY }}/ealejandro23/dominio:latest ${{ env.REGISTRY }}/ealejandro23/dominio:ep2
-    
-    - name: Push ep2 tag
-      run: docker push ${{ env.REGISTRY }}/ealejandro23/dominio:ep2
+      - name: Ejecutar pruebas (incluye pruebas 5 y 6)
+        working-directory: servicio-campanas
+        run: |
+          pytest -v --cov=app --cov-report=term-missing --cov-report=xml
 
-  tag-ep2:
-    needs: build-and-push
+      - name: Publicar cobertura
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobertura-campanas
+          path: servicio-campanas/coverage.xml
+          if-no-files-found: ignore
+
+  test-datos:
+    name: Tests tratamiento de datos
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/ep2')
-    
-    permissions:
-      contents: read
-      packages: write
-    
+    timeout-minutes: 15
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Log in to GitHub Container Registry
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Pull latest image
-      run: docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-    
-    - name: Tag as ep2
-      run: |
-        docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:ep2
-    
-    - name: Push ep2 tag
-      run: docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:ep2
+      - uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pandas numpy scikit-learn joblib psycopg2-binary
+
+      - name: Ejecutar pruebas de datos
+        run: pytest datos/tests -v
+
+  # ===========================================================================
+  # BUILD AND PUSH - sólo main o tag ep3, siempre después de los tests
+  # ===========================================================================
+  build-and-push-backend:
+    name: Imagen backend
+    needs: [test-campanas, test-datos]
+    runs-on: ubuntu-latest
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      startsWith(github.ref, 'refs/tags/ep3')
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Metadatos
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/backend
+          tags: |
+            type=sha,prefix=sha-
+            type=raw,value=latest
+            type=ref,event=tag
+
+      - name: Build y push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-and-push-campanas:
+    name: Imagen worker de campañas
+    needs: [test-campanas, test-datos]
+    runs-on: ubuntu-latest
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      startsWith(github.ref, 'refs/tags/ep3')
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Metadatos
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/campanas
+          tags: |
+            type=sha,prefix=sha-
+            type=raw,value=latest
+            type=ref,event=tag
+
+      - name: Build y push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./servicio-campanas
+          file: ./servicio-campanas/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-and-push-edge:
+    name: Imagen borde TLS
+    needs: [test-campanas, test-datos]
+    runs-on: ubuntu-latest
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      startsWith(github.ref, 'refs/tags/ep3')
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Metadatos
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/edge
+          tags: |
+            type=sha,prefix=sha-
+            type=raw,value=latest
+            type=ref,event=tag
+
+      - name: Build y push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./edge
+          file: ./edge/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ===========================================================================
+  # TAG EP3 - publica el tag estable que consume docker-compose.yml
+  # ===========================================================================
+  tag-ep3:
+    name: Tag ep3 (${{ matrix.image }})
+    needs: [build-and-push-backend, build-and-push-campanas, build-and-push-edge]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/ep3')
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [backend, campanas, edge]
+    steps:
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Retag latest -> ep3
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ matrix.image }}"
+          docker pull "$IMAGE:latest"
+          docker tag "$IMAGE:latest" "$IMAGE:ep3"
+          docker push "$IMAGE:ep3"
