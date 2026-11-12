@@ -1,25 +1,82 @@
 # =============================================================================
-# DOCKER COMPOSE - NEXO RECOMMENDER SYSTEM
+# DOCKER COMPOSE - NEXO RECOMMENDER SYSTEM - EP3
 # =============================================================================
-# Sistema de recomendación de productos con arquitectura de microservicios.
+# Sistema de recomendación + worker de campañas con LLM.
 #
-# Para levantar el sistema:
-#   docker compose -p equipo02 pull
-#   docker compose -p equipo02 up -d
+# En el servidor EC2:
+#   cp .env.example .env    # completar secretos, permisos 600
+#   docker compose pull
+#   docker compose up -d
+#
+# Sólo el borde (edge) publica puertos: 80 y 443.
+# El resto de servicios queda en la red interna nexo-network.
 #
 # Equipo: 2
 # ITY1102 - Arquitectura de Sistemas de Inteligencia Artificial
 # =============================================================================
 
+name: equipo02
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-env-file: &env-file
+  - path: .env
+    required: false
+
+x-common-env: &common-env
+  DB_HOST: ${DB_HOST:-db}
+  DB_PORT: ${DB_PORT:-5432}
+  DB_NAME: ${DB_NAME:-nexo}
+  DB_USER: ${DB_USER:-nexo}
+  DB_PASSWORD: ${DB_PASSWORD:-nexo123}
+  AWS_REGION: ${AWS_REGION:-us-east-1}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
 services:
   # ===========================================================================
-  # GATEWAY - Único punto de entrada (puerto 8080)
+  # BORDE - Nginx con TLS autofirmado. Único servicio con puertos publicados.
+  # ===========================================================================
+  edge:
+    image: ghcr.io/ealejandro23/edge:${IMAGE_TAG:-ep3}
+    container_name: equipo02-edge
+    environment:
+      DOMAIN: ${DOMAIN:-nexo.local}
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      gateway:
+        condition: service_healthy
+      campanas:
+        condition: service_healthy
+    networks:
+      - nexo-network
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://localhost/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.10'
+          memory: 64M
+
+  # ===========================================================================
+  # GATEWAY - Único punto de entrada de la aplicación (interno :8080)
   # ===========================================================================
   gateway:
-    image: ghcr.io/franalarcon24/gateway:ep2
+    image: ghcr.io/franalarcon24/gateway:${IMAGE_TAG:-ep3}
     container_name: equipo02-gateway
-    ports:
-      - "8080:8080"
+    env_file: *env-file
+    environment:
+      <<: *common-env
     depends_on:
       front:
         condition: service_healthy
@@ -27,9 +84,12 @@ services:
         condition: service_healthy
       dominio:
         condition: service_healthy
+    expose:
+      - "8080"
     networks:
       - nexo-network
     restart: unless-stopped
+    logging: *default-logging
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
@@ -45,15 +105,20 @@ services:
   # FRONT - Interfaz de usuario (Streamlit)
   # ===========================================================================
   front:
-    image: ghcr.io/ealejandro23/front:ep2
+    image: ghcr.io/ealejandro23/front:${IMAGE_TAG:-ep3}
     container_name: equipo02-front
+    env_file: *env-file
     environment:
-      - API_GATEWAY_URL=http://gateway:8080
+      <<: *common-env
+      API_GATEWAY_URL: http://gateway:8080
+    expose:
+      - "8501"
     networks:
       - nexo-network
     restart: unless-stopped
+    logging: *default-logging
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -67,13 +132,18 @@ services:
   # MICROSERVICIO DE IA - Modelo PyTorch
   # ===========================================================================
   ia:
-    image: ghcr.io/ealejandro23/ia:ep2
+    image: ghcr.io/ealejandro23/ia:${IMAGE_TAG:-ep3}
     container_name: equipo02-ia
+    env_file: *env-file
     environment:
-      - MODEL_PATH=/app/modelo_entrenado.pkl
+      <<: *common-env
+      MODEL_PATH: /app/modelo_entrenado.pkl
+    expose:
+      - "8000"
     networks:
       - nexo-network
     restart: unless-stopped
+    logging: *default-logging
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -86,26 +156,26 @@ services:
           memory: 256M
 
   # ===========================================================================
-  # MICROSERVICIO DE DOMINIO - Lógica de negocio (RÉPLICA 1)
+  # MICROSERVICIO DE DOMINIO - Réplica 1
   # ===========================================================================
   dominio:
-    image: ghcr.io/ealejandro23/dominio:ep2
+    image: ghcr.io/ealejandro23/dominio:${IMAGE_TAG:-ep3}
     container_name: equipo02-dominio-1
+    env_file: *env-file
     environment:
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_NAME=nexo
-      - DB_USER=nexo
-      - DB_PASSWORD=nexo123
-      - IA_SERVICE_URL=http://ia:8000
+      <<: *common-env
+      IA_SERVICE_URL: http://ia:8000
     depends_on:
       db:
         condition: service_healthy
       ia:
         condition: service_healthy
+    expose:
+      - "8000"
     networks:
       - nexo-network
     restart: unless-stopped
+    logging: *default-logging
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -118,26 +188,26 @@ services:
           memory: 256M
 
   # ===========================================================================
-  # MICROSERVICIO DE DOMINIO - RÉPLICA 2 (Balanceo de carga)
+  # MICROSERVICIO DE DOMINIO - Réplica 2
   # ===========================================================================
   dominio2:
-    image: ghcr.io/ealejandro23/dominio:ep2
+    image: ghcr.io/ealejandro23/dominio:${IMAGE_TAG:-ep3}
     container_name: equipo02-dominio-2
+    env_file: *env-file
     environment:
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_NAME=nexo
-      - DB_USER=nexo
-      - DB_PASSWORD=nexo123
-      - IA_SERVICE_URL=http://ia:8000
+      <<: *common-env
+      IA_SERVICE_URL: http://ia:8000
     depends_on:
       db:
         condition: service_healthy
       ia:
         condition: service_healthy
+    expose:
+      - "8000"
     networks:
       - nexo-network
     restart: unless-stopped
+    logging: *default-logging
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -155,17 +225,21 @@ services:
   db:
     image: postgres:15-alpine
     container_name: equipo02-db
+    env_file: *env-file
     environment:
-      - POSTGRES_DB=nexo
-      - POSTGRES_USER=nexo
-      - POSTGRES_PASSWORD=nexo123
+      POSTGRES_DB: ${DB_NAME:-nexo}
+      POSTGRES_USER: ${DB_USER:-nexo}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-nexo123}
     volumes:
       - db-data:/var/lib/postgresql/data
+    expose:
+      - "5432"
     networks:
       - nexo-network
     restart: unless-stopped
+    logging: *default-logging
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nexo -d nexo"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-nexo} -d ${DB_NAME:-nexo}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -176,24 +250,145 @@ services:
           memory: 256M
 
   # ===========================================================================
+  # RABBITMQ - Cola de trabajos de campañas
+  # ===========================================================================
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: equipo02-rabbitmq
+    env_file: *env-file
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-nexo}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-nexo123}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-/}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    expose:
+      - "5672"
+      - "15672"
+    networks:
+      - nexo-network
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+
+  # ===========================================================================
+  # API DE CAMPAÑAS - POST /api/campanas/{usuario} y GET /api/health
+  # ===========================================================================
+  campanas:
+    image: ghcr.io/ealejandro23/campanas:${IMAGE_TAG:-ep3}
+    container_name: equipo02-campanas
+    env_file: *env-file
+    environment:
+      <<: *common-env
+      DATABASE_URL: ${DATABASE_URL:-}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_USER: ${RABBITMQ_USER:-nexo}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-nexo123}
+      RABBITMQ_QUEUE: ${RABBITMQ_QUEUE:-campanas}
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
+      NVIDIA_BASE_URL: ${NVIDIA_BASE_URL:-https://integrate.api.nvidia.com/v1}
+      NVIDIA_MODEL: ${NVIDIA_MODEL:-meta/llama-3.1-70b-instruct}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-20}
+      LLM_MAX_WAIT_SECONDS: ${LLM_MAX_WAIT_SECONDS:-30}
+      LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-3}
+      SAGEMAKER_ENDPOINT_NAME: ${SAGEMAKER_ENDPOINT_NAME:-}
+      S3_BUCKET: ${S3_BUCKET:-}
+      ANONYMIZATION_SALT: ${ANONYMIZATION_SALT:-cambiar-en-produccion}
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    expose:
+      - "8090"
+    networks:
+      - nexo-network
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8090/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+
+  # ===========================================================================
+  # WORKER DEL LLM - Consume RabbitMQ y llama a NVIDIA
+  # ===========================================================================
+  campanas-worker:
+    image: ghcr.io/ealejandro23/campanas:${IMAGE_TAG:-ep3}
+    container_name: equipo02-campanas-worker
+    command: ["python", "-m", "app.worker_main"]
+    env_file: *env-file
+    environment:
+      <<: *common-env
+      DATABASE_URL: ${DATABASE_URL:-}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_USER: ${RABBITMQ_USER:-nexo}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-nexo123}
+      RABBITMQ_QUEUE: ${RABBITMQ_QUEUE:-campanas}
+      RABBITMQ_MAX_RETRIES: ${RABBITMQ_MAX_RETRIES:-3}
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
+      NVIDIA_BASE_URL: ${NVIDIA_BASE_URL:-https://integrate.api.nvidia.com/v1}
+      NVIDIA_MODEL: ${NVIDIA_MODEL:-meta/llama-3.1-70b-instruct}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-20}
+      LLM_MAX_WAIT_SECONDS: ${LLM_MAX_WAIT_SECONDS:-30}
+      LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-3}
+      LLM_BACKOFF_SECONDS: ${LLM_BACKOFF_SECONDS:-0.5}
+      SAGEMAKER_ENDPOINT_NAME: ${SAGEMAKER_ENDPOINT_NAME:-}
+      S3_BUCKET: ${S3_BUCKET:-}
+      ANONYMIZATION_SALT: ${ANONYMIZATION_SALT:-cambiar-en-produccion}
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - nexo-network
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      disable: true
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+
+  # ===========================================================================
   # CARGA DE DATOS - Servicio one-shot
   # ===========================================================================
   carga:
-    image: ghcr.io/ealejandro23/backend:ep2
+    image: ghcr.io/ealejandro23/backend:${IMAGE_TAG:-ep3}
     container_name: equipo02-carga
     command: ["python", "carga/cargar.py"]
+    env_file: *env-file
     environment:
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_NAME=nexo
-      - DB_USER=nexo
-      - DB_PASSWORD=nexo123
+      <<: *common-env
     depends_on:
       db:
         condition: service_healthy
     networks:
       - nexo-network
     restart: "no"
+    logging: *default-logging
     deploy:
       resources:
         limits:
@@ -212,4 +407,6 @@ networks:
 # =============================================================================
 volumes:
   db-data:
+    driver: local
+  rabbitmq-data:
     driver: local

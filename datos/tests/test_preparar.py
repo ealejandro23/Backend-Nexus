@@ -2,162 +2,231 @@
 =============================================================================
 TESTS - TRATAMIENTO DE DATOS
 =============================================================================
-Verifica que el tratamiento de datos genere resultados correctos.
+Verifica las reglas de limpieza e integración con datos sintéticos, para que
+el pipeline pueda ejecutarse sin depender de archivos locales ni de rutas de
+Windows.
 
 Autor: Equipo 2 - ITY1102 Arquitectura de Sistemas IA
 Fecha: 2026
 =============================================================================
 """
 
-import pytest
-import pandas as pd
 import os
 import sys
+
+import pandas as pd
+import pytest
 
 # Agregar el directorio padre al path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from preparar import (
-    limpiar_productos, limpiar_transacciones, limpiar_usuarios,
-    limpiar_clickstream, crear_variables_modelo, separar_train_test
+from preparar import (  # noqa: E402
+    crear_variables_modelo,
+    limpiar_clickstream,
+    limpiar_productos,
+    limpiar_transacciones,
+    limpiar_usuarios,
+    separar_train_test,
 )
 
-def test_productos_sin_duplicados():
-    """Verifica que los productos tratados no tengan duplicados."""
-    df = pd.read_csv(r"C:\Users\esteb\Downloads\caso-nexus\caso\datos\productos.csv")
-    df_limpio = limpiar_productos(df)
-    
-    # No debe haber SKUs duplicados
-    assert df_limpio['sku'].duplicated().sum() == 0
 
-def test_productos_sin_nulos_categoria():
-    """Verifica que los productos tratados no tengan nulos en categoría."""
-    df = pd.read_csv(r"C:\Users\esteb\Downloads\caso-nexus\caso\datos\productos.csv")
-    df_limpio = limpiar_productos(df)
-    
-    # No debe haber nulos en categoría
-    assert df_limpio['categoria'].isnull().sum() == 0
+@pytest.fixture
+def productos_crudos() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "sku": ["A", "A", "B", "C"],
+            "nombre": ["Producto A", "Producto A", "Producto B", "Producto C"],
+            "categoria": ["Audio", "AUDIO", "Video", "Audio"],
+            "marca": ["Marca1", "Marca1", "Marca2", "Marca1"],
+            "precio_lista": ["$19.929", "$19.929", "$5.000", "$1.000"],
+            "costo": [10000.0, 10000.0, None, 500.0],
+            "stock": [-5, 3, 10, 2],
+            "activo": ["Si", "true", "0", "1"],
+            "fecha_alta": ["2024-01-01"] * 4,
+        }
+    )
 
-def test_productos_categorias_normalizadas():
-    """Verifica que las categorías estén normalizadas a minúsculas."""
-    df = pd.read_csv(r"C:\Users\esteb\Downloads\caso-nexus\caso\datos\productos.csv")
-    df_limpio = limpiar_productos(df)
-    
-    # Todas las categorías deben estar en minúsculas
-    assert all(df_limpio['categoria'] == df_limpio['categoria'].str.lower())
 
-def test_productos_stock_no_negativo():
-    """Verifica que el stock no tenga valores negativos."""
-    df = pd.read_csv(r"C:\Users\esteb\Downloads\caso-nexus\caso\datos\productos.csv")
-    df_limpio = limpiar_productos(df)
-    
-    # No debe haber stock negativo
-    assert (df_limpio['stock'] >= 0).all()
+@pytest.fixture
+def transacciones_crudas() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "pedido_id": ["P1", "P2", "P3", "P4"],
+            "linea": [1, 1, 1, 1],
+            "usuario_id": ["U1", "U1", "U2", "invitado"],
+            "sku": ["A", "B", "A", "C"],
+            "fecha": ["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04"],
+            "cantidad": [1, -1, 2, 1],
+            "precio_unitario": ["10000", "5000", "10000", "1000"],
+            "descuento": [None, 500, 0, 0],
+            "total": [10000, -500, 20000, 1000],
+            "canal": ["web"] * 4,
+            "estado": ["pagado", "pagado", "completado", "cancelado"],
+        }
+    )
 
-def test_transacciones_sin_nulos_descuento():
-    """Verifica que las transacciones tratadas no tengan nulos en descuento."""
-    df = pd.read_csv(r"C:\Users\esteb\Downloads\caso-nexus\caso\datos\transacciones.csv")
-    df_limpio = limpiar_transacciones(df)
-    
-    # No debe haber nulos en descuento
-    assert df_limpio['descuento'].isnull().sum() == 0
 
-def test_transacciones_cantidad_positiva():
-    """Verifica que la cantidad no tenga valores negativos."""
-    df = pd.read_csv(r"C:\Users\esteb\Downloads\caso-nexus\caso\datos\transacciones.csv")
-    df_limpio = limpiar_transacciones(df)
-    
-    # No debe haber cantidad negativa
-    assert (df_limpio['cantidad'] >= 0).all()
+@pytest.fixture
+def usuarios_crudos() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "usuario_id": ["U1", "U2", "U2", "U3"],
+            "fecha_registro": ["2024-01-01"] * 4,
+            "region": ["Metropolitana", "VALPARAISO", "Valparaiso", "Biobio"],
+            "comuna": ["Santiago", "Viña del Mar", "Viña del Mar", "Concepción"],
+            "canal_captacion": ["web"] * 4,
+            "email_valido": ["true", "0", "1", None],
+            "acepta_marketing": [1, None, 0, 1],
+            "edad": [30, -5, 25, 999],
+        }
+    )
 
-def test_usuarios_edad_valida():
-    """Verifica que la edad esté en rango válido."""
-    df = pd.read_csv(r"C:\Users\esteb\Downloads\caso-nexus\caso\datos\usuarios.csv")
-    df_limpio = limpiar_usuarios(df)
-    
-    # La edad debe estar entre 0 y 120
-    assert ((df_limpio['edad'] >= 0) & (df_limpio['edad'] <= 120)).all()
 
-def test_usuarios_sin_duplicados():
-    """Verifica que los usuarios tratados no tengan duplicados."""
-    df = pd.read_csv(r"C:\Users\esteb\Downloads\caso-nexus\caso\datos\usuarios.csv")
-    df_limpio = limpiar_usuarios(df)
-    
-    # No debe haber usuario_id duplicados
-    assert df_limpio['usuario_id'].duplicated().sum() == 0
+@pytest.fixture
+def clickstream_crudo() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "usuario_id": ["U1", "U1", "U2", None],
+            "sku": ["A", "A", "B", "C"],
+            "timestamp": [
+                "2024-01-01 10:00:00",
+                "2024-01-01 10:00:00",
+                "2024-01-02T11:00:00",
+                "fecha-invalida",
+            ],
+            "tipo_evento": ["Vista", "Vista", "CLIC", "vista"],
+        }
+    )
 
-def test_clickstream_sin_duplicados():
-    """Verifica que el clickstream tratado no tenga duplicados."""
-    df = pd.read_csv(r"C:\Users\esteb\Downloads\caso-nexus\caso\datos\clickstream.csv")
-    df_limpio = limpiar_clickstream(df)
-    
-    # No debe haber duplicados
+
+def test_productos_sin_duplicados(productos_crudos: pd.DataFrame) -> None:
+    df_limpio = limpiar_productos(productos_crudos)
+    assert df_limpio["sku"].duplicated().sum() == 0
+
+
+def test_productos_categorias_normalizadas(productos_crudos: pd.DataFrame) -> None:
+    df_limpio = limpiar_productos(productos_crudos)
+    assert all(df_limpio["categoria"] == df_limpio["categoria"].str.lower())
+    assert df_limpio["categoria"].isnull().sum() == 0
+
+
+def test_productos_stock_no_negativo(productos_crudos: pd.DataFrame) -> None:
+    df_limpio = limpiar_productos(productos_crudos)
+    assert (df_limpio["stock"] >= 0).all()
+
+
+def test_productos_precio_numerico(productos_crudos: pd.DataFrame) -> None:
+    df_limpio = limpiar_productos(productos_crudos)
+    assert pd.api.types.is_numeric_dtype(df_limpio["precio_lista"])
+    assert (df_limpio["precio_lista"] > 0).all()
+
+
+def test_transacciones_sin_nulos_descuento(
+    transacciones_crudas: pd.DataFrame,
+) -> None:
+    df_limpio = limpiar_transacciones(transacciones_crudas)
+    assert df_limpio["descuento"].isnull().sum() == 0
+
+
+def test_transacciones_cantidad_positiva(
+    transacciones_crudas: pd.DataFrame,
+) -> None:
+    df_limpio = limpiar_transacciones(transacciones_crudas)
+    assert (df_limpio["cantidad"] >= 0).all()
+    assert "es_devolucion" in df_limpio.columns
+
+
+def test_transacciones_solo_estados_validos(
+    transacciones_crudas: pd.DataFrame,
+) -> None:
+    df_limpio = limpiar_transacciones(transacciones_crudas)
+    assert set(df_limpio["estado"]).issubset({"pagado", "completado", "entregado"})
+
+
+def test_usuarios_edad_valida(usuarios_crudos: pd.DataFrame) -> None:
+    df_limpio = limpiar_usuarios(usuarios_crudos)
+    assert ((df_limpio["edad"] >= 0) & (df_limpio["edad"] <= 120)).all()
+
+
+def test_usuarios_sin_duplicados(usuarios_crudos: pd.DataFrame) -> None:
+    df_limpio = limpiar_usuarios(usuarios_crudos)
+    assert df_limpio["usuario_id"].duplicated().sum() == 0
+
+
+def test_clickstream_sin_duplicados(clickstream_crudo: pd.DataFrame) -> None:
+    df_limpio = limpiar_clickstream(clickstream_crudo)
     assert df_limpio.duplicated().sum() == 0
+    assert "es_visitante" in df_limpio.columns
 
-def test_variables_modelo_columnas():
-    """Verifica que las variables del modelo tengan las columnas correctas."""
-    # Crear datos de prueba con la estructura correcta
-    transacciones = pd.DataFrame({
-        'usuario_id': ['U1', 'U1', 'U2', 'U2'],
-        'sku': ['NX-1', 'NX-2', 'NX-1', 'NX-2'],
-        'pedido_id': ['P1', 'P2', 'P3', 'P4'],
-        'total': [100000, 50000, 75000, 25000],
-        'fecha': ['2024-01-01', '2024-01-02', '2024-01-03', '2024-01-04']
-    })
-    
-    clickstream = pd.DataFrame({
-        'usuario_id': ['U1', 'U1', 'U2', 'U2'],
-        'sku': ['NX-1', 'NX-2', 'NX-1', 'NX-2'],
-        'tipo_evento': ['vista', 'clic', 'vista', 'clic']
-    })
-    
-    productos = pd.DataFrame({
-        'sku': ['NX-1', 'NX-2'],
-        'categoria': ['notebooks', 'monitores']
-    })
-    
-    usuarios = pd.DataFrame({
-        'usuario_id': ['U1', 'U2'],
-        'edad': [30, 25],
-        'acepta_marketing': [1, 0]
-    })
-    
-    variables = crear_variables_modelo(transacciones, clickstream, productos, usuarios)
-    
-    # Verificar que tiene las columnas esperadas
+
+def test_variables_modelo_columnas() -> None:
+    transacciones = pd.DataFrame(
+        {
+            "usuario_id": ["U1", "U1", "U2", "U2"],
+            "sku": ["NX-1", "NX-2", "NX-1", "NX-2"],
+            "pedido_id": ["P1", "P2", "P3", "P4"],
+            "total": [100000, 50000, 75000, 25000],
+            "fecha": ["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04"],
+        }
+    )
+    clickstream = pd.DataFrame(
+        {
+            "usuario_id": ["U1", "U1", "U2", "U2"],
+            "sku": ["NX-1", "NX-2", "NX-1", "NX-2"],
+            "tipo_evento": ["vista", "clic", "vista", "clic"],
+        }
+    )
+    productos = pd.DataFrame(
+        {"sku": ["NX-1", "NX-2"], "categoria": ["notebooks", "monitores"]}
+    )
+    usuarios = pd.DataFrame(
+        {
+            "usuario_id": ["U1", "U2"],
+            "edad": [30, 25],
+            "acepta_marketing": [1, 0],
+        }
+    )
+
+    variables = crear_variables_modelo(
+        transacciones, clickstream, productos, usuarios
+    )
+
     columnas_esperadas = [
-        'num_compras_categoria', 'num_vistas_categoria', 'num_clics_categoria',
-        'total_gastado_categoria', 'dias_ultima_compra', 'frecuencia_compra',
-        'ticket_promedio', 'edad', 'acepta_marketing', 'propension_compra'
+        "num_compras_categoria",
+        "num_vistas_categoria",
+        "num_clics_categoria",
+        "total_gastado_categoria",
+        "dias_ultima_compra",
+        "frecuencia_compra",
+        "ticket_promedio",
+        "edad",
+        "acepta_marketing",
+        "propension_compra",
     ]
-    
     for col in columnas_esperadas:
         assert col in variables.columns, f"Falta la columna: {col}"
 
-def test_separacion_train_test():
-    """Verifica que la separación train/test sea correcta."""
-    # Crear datos de prueba con suficientes muestras para estratificación
-    variables = pd.DataFrame({
-        'num_compras_categoria': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-        'num_vistas_categoria': [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
-        'num_clics_categoria': [5, 10, 15, 20, 25, 30, 35, 40, 45, 50],
-        'total_gastado_categoria': [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000],
-        'dias_ultima_compra': [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
-        'frecuencia_compra': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-        'ticket_promedio': [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000],
-        'edad': [25, 30, 35, 40, 45, 50, 55, 60, 65, 70],
-        'acepta_marketing': [0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
-        'propension_compra': [0, 1, 0, 1, 0, 1, 0, 1, 0, 1]
-    })
-    
+
+def test_separacion_train_test() -> None:
+    variables = pd.DataFrame(
+        {
+            "num_compras_categoria": range(1, 11),
+            "num_vistas_categoria": range(10, 110, 10),
+            "num_clics_categoria": range(5, 55, 5),
+            "total_gastado_categoria": range(1000, 11000, 1000),
+            "dias_ultima_compra": range(10, 110, 10),
+            "frecuencia_compra": range(1, 11),
+            "ticket_promedio": range(1000, 11000, 1000),
+            "edad": range(25, 75, 5),
+            "acepta_marketing": [0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
+            "propension_compra": [0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
+        }
+    )
+
     X_train, X_test, y_train, y_test, feature_cols = separar_train_test(variables)
-    
-    # Verificar que la separación es 80/20
+
     assert len(X_train) == 8
     assert len(X_test) == 2
-    
-    # Verificar que las features son correctas
     assert len(feature_cols) == 9
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+    assert len(y_train) == 8
+    assert len(y_test) == 2
