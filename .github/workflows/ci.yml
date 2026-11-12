@@ -5,7 +5,6 @@ on:
     branches: [dev, main]
   push:
     branches: [main, dev]
-  create:
     tags:
       - 'ep3'
   workflow_dispatch:
@@ -49,7 +48,7 @@ jobs:
       - name: Ejecutar pruebas (incluye pruebas 5 y 6)
         working-directory: servicio-campanas
         run: |
-          pytest -v --cov=app --cov-report=term-missing --cov-report=xml
+          python -m pytest -v --cov=app --cov-report=term-missing --cov-report=xml
 
       - name: Publicar cobertura
         if: always()
@@ -77,7 +76,7 @@ jobs:
           pip install pytest pandas numpy scikit-learn joblib psycopg2-binary
 
       - name: Ejecutar pruebas de datos
-        run: pytest datos/tests -v
+        run: python -m pytest datos/tests -v
 
   # ===========================================================================
   # BUILD AND PUSH - sólo main o tag ep3, siempre después de los tests
