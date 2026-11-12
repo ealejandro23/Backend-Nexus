@@ -184,6 +184,7 @@ Notas:
 | Síntoma | Causa probable | Solución |
 |---|---|---|
 | `docker compose pull` falla con `denied` | Imagen privada | `docker login ghcr.io` con un PAT `read:packages` |
+| Paquete nuevo en GHCR privado | Los paquetes nuevos nacen privados | GitHub → Packages → `campanas`/`edge` → Package settings → Change visibility → Public |
 | `health` con `base_datos: error` | PostgreSQL aún iniciando | Esperar 30 s y reintentar |
 | `health` con `cola: error` | RabbitMQ sin memoria | Revisar `docker compose logs rabbitmq` |
 | `health` con `llm: no_configurado` | Falta `NVIDIA_API_KEY` | Completar `.env` y `docker compose up -d` |
