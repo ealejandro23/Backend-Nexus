@@ -58,7 +58,7 @@ services:
     restart: unless-stopped
     logging: *default-logging
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://localhost/healthz >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://127.0.0.1/healthz >/dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -102,7 +102,7 @@ services:
           memory: 64M
 
   # ===========================================================================
-  # FRONT - Interfaz de usuario (Streamlit)
+  # FRONT - Interfaz de usuario (FastAPI/uvicorn en :8000)
   # ===========================================================================
   front:
     image: ghcr.io/ealejandro23/front:${IMAGE_TAG:-ep3}
@@ -112,13 +112,13 @@ services:
       <<: *common-env
       API_GATEWAY_URL: http://gateway:8080
     expose:
-      - "8501"
+      - "8000"
     networks:
       - nexo-network
     restart: unless-stopped
     logging: *default-logging
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
       interval: 30s
       timeout: 10s
       retries: 3

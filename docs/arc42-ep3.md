@@ -18,36 +18,22 @@
 
 ## 1. Resumen Ejecutivo
 
-La EP3 extiende el sistema Nexo Recommender con un **worker de campañas
-personalizadas**. El flujo es:
-
-1. La API recibe `POST /api/campanas/{usuario}` y publica un job en RabbitMQ.
-2. El worker consume el job y obtiene el perfil del cliente y sus predicciones.
-3. El perfil se **anonimiza** antes de salir del perímetro.
-4. El worker consulta SageMaker (si está configurado) y luego a la API de
-   **NVIDIA** para redactar la campaña.
-5. La campaña se guarda en PostgreSQL y, opcionalmente, se exporta a S3.
-6. Si el LLM falla, se genera una campaña de respaldo y se marca `degradado`.
-
-Todo corre en una instancia **EC2 t3.medium** en `us-east-1`, con IP elástica,
-`LabInstanceProfile`, security group 80/443 y SSH restringido a la IP del
-administrador. El compose descarga imágenes `:ep3` y se apoya en un archivo
-`.env` que sólo existe en el servidor.
+> **TODO — Responsable:** _[completar nombre del integrante]_.
+>
+> Esta sección debe presentar el resumen ejecutivo del sistema completo:
+> problema abordado, solución propuesta en la EP3, resultados obtenidos y
+> estado final de la entrega. No forma parte del alcance redactado por
+> Esteban Gamboa.
 
 ---
 
 ## 2. Requisitos Cubiertos
 
-| Requisito EP3 | Evidencia |
-|---|---|
-| EC2 t3.medium us-east-1, IP elástica, LabInstanceProfile, SG 80/443 y 22 restringido | `infra/cloudformation.yaml`, `infra/README.md` |
-| Compose con imágenes `:ep3`, `.env` en servidor y `.env.example` en repo | `docker-compose.yml`, `.env.example`, `infra/deploy.sh` |
-| RabbitMQ + worker NVIDIA con tiempo máximo, reintentos 429 y modo degradado | `servicio-campanas/app/queue.py`, `app/llm.py` |
-| Anonimización antes del LLM y ruta `POST /api/campanas/{usuario}` | `app/anonymizer.py`, `app/main.py` |
-| `GET /api/health` con DB, SageMaker, cola y LLM por separado | `app/health.py` |
-| Pipeline con tests antes de publicar, tag `ep3` e imágenes `:ep3` | `.github/workflows/ci.yml` |
-| Pruebas 5, 6 y propia | `servicio-campanas/tests/` |
-| Informe: apartado 3, apartado 5 y anexos A/B/C | Este documento |
+> **TODO — Responsable:** _[completar nombre del integrante]_.
+>
+> Esta sección debe contener la tabla de requisitos de la EP3, su evidencia y
+> la trazabilidad con los apartados 3 y 5. No forma parte del alcance redactado
+> por Esteban Gamboa.
 
 ---
 
@@ -234,7 +220,31 @@ servicios externos.
         └─────────────────────────────────────────────┘
 ```
 
-### 3.7 Costos
+### 3.7 Modelo de datos de campañas
+
+```sql
+CREATE TABLE campanas (
+    id SERIAL PRIMARY KEY,
+    job_id UUID NOT NULL UNIQUE,
+    usuario_id VARCHAR(50) NOT NULL,
+    canal VARCHAR(50) NOT NULL,
+    asunto VARCHAR(200) NOT NULL,
+    mensaje TEXT NOT NULL,
+    recomendaciones JSONB NOT NULL DEFAULT '[]'::jsonb,
+    degradado BOOLEAN NOT NULL DEFAULT FALSE,
+    motivo_degradado VARCHAR(300),
+    modelo_llm VARCHAR(100),
+    creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+La tabla la crea el propio servicio (`ensure_schema`) al arrancar, sin montar
+archivos de inicialización. El `job_id` es idempotente: si RabbitMQ reentrega
+el mensaje, el `UPSERT` no duplica la campaña. Los datos personales no se
+persisten en esta tabla: `usuario_id` es el identificador de negocio y la
+exportación a S3 usa su hash.
+
+### 3.8 Costos
 
 Supuestos: 730 horas/mes, 1.000 campañas/mes, ~1.500 tokens por campaña,
 10 GB de campañas en S3.
@@ -257,27 +267,14 @@ Notas:
 
 ---
 
-## 4. Modelo de Datos de Campañas
+## 4. Modelo de Datos del Sistema
 
-```sql
-CREATE TABLE campanas (
-    id SERIAL PRIMARY KEY,
-    job_id UUID NOT NULL UNIQUE,
-    usuario_id VARCHAR(50) NOT NULL,
-    canal VARCHAR(50) NOT NULL,
-    asunto VARCHAR(200) NOT NULL,
-    mensaje TEXT NOT NULL,
-    recomendaciones JSONB NOT NULL DEFAULT '[]'::jsonb,
-    degradado BOOLEAN NOT NULL DEFAULT FALSE,
-    motivo_degradado VARCHAR(300),
-    modelo_llm VARCHAR(100),
-    creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-La tabla la crea el propio servicio (`ensure_schema`) al arrancar, sin montar
-archivos de inicialización. El `job_id` es idempotente: si RabbitMQ reentrega
-el mensaje, el `UPSERT` no duplica la campaña.
+> **TODO — Responsable:** _[completar nombre del integrante]_.
+>
+> Esta sección debe describir el modelo de datos completo del sistema (tablas
+> base de productos, usuarios y transacciones, además de las tablas de dominio
+> de la EP3). El modelo de la tabla `campanas` que respalda el worker se
+> documenta en §3.7 por pertenecer al alcance de Esteban Gamboa.
 
 ---
 
@@ -340,7 +337,7 @@ el mensaje, el `UPSERT` no duplica la campaña.
 
 ```text
 $ cd servicio-campanas
-$ pytest -v --cov=app
+$ python -m pytest -v --cov=app
 
 tests/test_anonymization.py ....                          [ 20%]
 tests/test_campaigns_api.py ......                        [ 50%]
@@ -381,6 +378,7 @@ integración manuales del despliegue.
 | Hash de usuario en objetos S3 | `campaigns.py` | No expone el ID real en el bucket |
 | Exportación S3 en thread | `campaigns.py` | No bloquea el event loop |
 | Imagen única para API y worker | `Dockerfile` | Menos capas, menos superficie |
+| Healthcheck del front alineado a `:8000` | `docker-compose.yml` | Evita falsos `unhealthy` y permite arrancar gateway y borde |
 | Usuario no root UID 10001 | `Dockerfile` | Menor impacto ante RCE |
 | Cache de capas en CI | `ci.yml` | Builds más rápidos y reproducibles |
 | Límites de CPU/memoria | `docker-compose.yml` | Un servicio no consume el host |
@@ -403,22 +401,34 @@ Reglas cumplidas:
 - El workflow usa `GHCR_PAT` si existe y cae a `GITHUB_TOKEN` si no.
 - `concurrency` cancela ejecuciones viejas de la misma rama.
 
+**Evidencia:** ejecución verde del tag `ep3` en
+https://github.com/ealejandro23/Backend-Nexus/actions/runs/43140534432
+(tests de campañas y datos, builds `backend`, `campanas` y `edge`, y job
+`tag-ep3` que publica las imágenes `:ep3` en `linux/amd64`).
+
 ### 5.6 Prueba de humo end-to-end
 
-Se levantó el stack real con `docker compose -p equipo02` usando las imágenes
-`:ep3` publicadas en GHCR (`db`, `rabbitmq`, `campanas`, `campanas-worker` y el
-servicio one-shot `carga`, que crea las tablas base).
+Se levantó el stack completo con `docker compose -p equipo02` usando las nueve
+imágenes `:ep3` publicadas en GHCR (`db`, `rabbitmq`, `campanas`,
+`campanas-worker`, `edge`, `gateway`, `front`, `ia`, `dominio` ×2) y el
+servicio one-shot `carga`, que crea las tablas base.
 
 | Paso | Resultado |
 |---|---|
-| `GET /api/health` | `estado=ok`; `base_datos=ok`, `cola=ok`, `sagemaker=no_configurado`, `llm=no_configurado` |
-| `POST /api/campanas/U100000` | `202`, `estado=en_cola`, `job_id` UUID generado |
+| `GET https://localhost/healthz` (borde) | `200 ok` |
+| `GET https://localhost/api/health` (borde → campañas) | `estado=ok`; `base_datos=ok`, `cola=ok`, `sagemaker=no_configurado`, `llm=no_configurado` |
+| `GET https://localhost/health` (borde → gateway) | `{"status":"ok","servicio":"gateway"}` |
+| `GET https://localhost/` (borde → gateway → front) | `200 text/html` |
+| `POST https://localhost/api/campanas/U100000` | `202`, `estado=en_cola`, `job_id` UUID generado |
 | RabbitMQ | Job consumido; `campanas=0`, `campanas.dlq=0` |
-| `GET /api/campanas/U100000` | `200`, campaña con recomendaciones `audio` (0,82) y `video` (0,55) |
+| Worker (log) | `Campaña ... generada para u_a1ec2af3fe0c068a` (usuario anonimizado) |
+| `GET https://localhost/api/campanas/U100000` | `200`, campaña con recomendaciones `audio` (0,82) y `video` (0,55) |
 | LLM sin clave | `degradado=true`, `motivo_degradado="NVIDIA_API_KEY no configurada"` |
 
-Esto valida en contenedores reales el encolado, el consumo por el worker, el
-modo degradado de la prueba 6 y la consulta posterior de la campaña.
+Esto valida en contenedores reales, a través del borde TLS, el enrutamiento
+`/api/*` hacia el servicio de campañas, el enrutamiento del front por el
+gateway, el encolado y consumo por el worker, la anonimización previa al LLM y
+el modo degradado de la prueba 6.
 
 ---
 
@@ -440,7 +450,7 @@ modo degradado de la prueba 6 y la consulta posterior de la campaña.
 
 | Herramienta | Uso | Verificación |
 |---|---|---|
-| Claude / asistente de código | Redacción de documentación, estructura del worker, tests y scripts de despliegue | Revisión de cifras, ejecución de pytest y prueba de humo en EC2 |
+| Claude / asistente de código | Redacción de documentación, estructura del worker, tests y scripts de despliegue | Revisión de cifras, ejecución de pytest y prueba de humo en contenedores reales |
 | GitHub Copilot | Sugerencias de código en Python y YAML | Revisión de pares y pruebas automatizadas |
 
 **Declaración:** el integrante entiende el contenido de este documento y puede
@@ -489,6 +499,6 @@ docker compose -p equipo02 exec campanas curl -s localhost:8090/api/health
 
 | Nombre | GitHub | Piezas |
 |---|---|---|
-| Francisca Alarcón | @francisca-alarcon | Front, Gateway |
-| Benjamín Trujillo | @benjamin-trujillo | IA, Modelo |
-| Esteban Gamboa | @esteban-gamboa | Infraestructura, worker del LLM, pipeline, documentación |
+| Francisca Alarcón | @FranAlarcon24 | Front, Gateway |
+| Benjamín | @zbenja19 | IA, Modelo |
+| Esteban Gamboa | @ealejandro23 | Infraestructura, worker del LLM, pipeline, documentación |
