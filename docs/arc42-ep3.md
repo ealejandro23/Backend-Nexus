@@ -433,9 +433,9 @@ etiqueta `org.opencontainers.image.revision` apunta al commit del tag.
 
 ### 5.6 Prueba de humo end-to-end
 
-Se levantó el stack completo con `docker compose -p equipo02` usando las nueve
-imágenes `:ep3` publicadas en GHCR (`db`, `rabbitmq`, `campanas`,
-`campanas-worker`, `edge`, `gateway`, `front`, `ia`, `dominio` ×2) y el
+Se levantó el stack completo con `docker compose -p equipo02` usando las siete
+imágenes `:ep3` publicadas en GHCR (`campanas`, `edge`, `gateway`, `front`, `ia`,
+`dominio` ×2, `backend`) más las oficiales `postgres` y `rabbitmq`, y el
 servicio one-shot `carga`, que crea las tablas base.
 
 | Paso | Resultado |
@@ -454,6 +454,15 @@ Esto valida en contenedores reales, a través del borde TLS, el enrutamiento
 `/api/*` hacia el servicio de campañas, el enrutamiento del front por el
 gateway, el encolado y consumo por el worker, la anonimización previa al LLM y
 el modo degradado de la prueba 6.
+
+**Datos de entrada:** los CSV tratados (`productos_limpios.csv`,
+`usuarios_limpios.csv`, `transacciones_limpias.csv`) no se versionan porque
+contienen datos personales. El servicio `carga` los monta en sólo lectura desde
+`datos/datos_tratados/`. Si la carpeta está vacía, el contenedor termina con
+código 1 y un error explícito, en lugar de declarar éxito con cero filas: sin
+usuarios, `POST /api/campanas/{usuario}` no tiene nada que procesar y responde
+`404`. Con los tres CSV montados se reprodujo el flujo completo (`POST` → `202`
+y campaña en modo degradado cuando no hay clave del LLM).
 
 **Consumo puro desde GHCR:** en una carpeta vacía, con `docker logout ghcr.io`
 (sin credenciales), se descargaron sólo `docker-compose.yml` y `.env.example`
