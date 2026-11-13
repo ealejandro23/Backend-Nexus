@@ -464,6 +464,15 @@ usuarios, `POST /api/campanas/{usuario}` no tiene nada que procesar y responde
 `404`. Con los tres CSV montados se reprodujo el flujo completo (`POST` → `202`
 y campaña en modo degradado cuando no hay clave del LLM).
 
+El dataset real usado por el equipo proviene de `ealejandro23/Microservicio-IA`
+(rama `main`, `datos/crudos/`) o de `ealejandro23/Microservicio-Nexus`
+(rama `feat/dominio-nexus`, `carga/datos/`); ambas copias son idénticas. Tras
+`datos/preparar.py`, `carga` insertó **1.500 productos, 4.000 usuarios y
+19.011 transacciones**, y `POST /api/campanas/U100649` devolvió `202` con el
+usuario anonimizado en el log del worker. El pipeline de datos se corrigió para
+normalizar fechas a ISO (`DD/MM/YYYY` y formatos mixtos) y tolerar fechas nulas,
+sin lo cual PostgreSQL rechazaba la carga.
+
 **Consumo puro desde GHCR:** en una carpeta vacía, con `docker logout ghcr.io`
 (sin credenciales), se descargaron sólo `docker-compose.yml` y `.env.example`
 desde el tag `ep3`, se completó `.env` y `docker compose pull && up -d` levantó
