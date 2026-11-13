@@ -475,6 +475,13 @@ usuario anonimizado en el log del worker. El pipeline de datos se corrigió para
 normalizar fechas a ISO (`DD/MM/YYYY` y formatos mixtos) y tolerar fechas nulas,
 sin lo cual PostgreSQL rechazaba la carga.
 
+Con `NVIDIA_API_KEY` configurada, el mismo `POST` devolvió campaña **sin
+degradar** (`degradado=false`, `intentos=1`), con asunto "Descubre lo nuevo en
+Nexo Retail" y un mensaje real de `nvidia/nemotron-3.5-lightning-30b-a3b`. El log
+del worker registró `HTTP/1.1 200 OK` contra `integrate.api.nvidia.com` y el
+seudónimo `u_d17d74aaa54880aa`. `GET /api/health` reportó `base_datos=ok`,
+`cola=ok` y `llm=ok` (SageMaker queda `no_configurado` sin su endpoint en AWS).
+
 **Consumo puro desde GHCR:** en una carpeta vacía, con `docker logout ghcr.io`
 (sin credenciales), se descargaron sólo `docker-compose.yml` y `.env.example`
 desde el tag `ep3`, se completó `.env` y `docker compose pull && up -d` levantó
