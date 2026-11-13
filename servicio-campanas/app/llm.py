@@ -177,6 +177,10 @@ class NvidiaLLMClient:
             "max_tokens": self.settings.llm_max_tokens,
             "stream": False,
         }
+        if self.settings.llm_disable_thinking:
+            # Los modelos Nemotron 3 devuelven la respuesta final en "content"
+            # sólo si se desactiva el razonamiento; si no, "content" es null.
+            payload["chat_template_kwargs"] = {"enable_thinking": False}
 
         deadline = inicio + self.settings.llm_max_wait_seconds
         ultimo_error = "sin intentos"
@@ -222,7 +226,11 @@ class NvidiaLLMClient:
 
             try:
                 data = response.json()
-                contenido = data["choices"][0]["message"]["content"]
+                contenido = data["choices"][0]["message"].get("content")
+                if not contenido or not str(contenido).strip():
+                    raise ValueError(
+                        "respuesta sin contenido final (razonamiento agotado)"
+                    )
                 asunto, mensaje = _parsear_contenido(str(contenido))
                 return LLMResult(
                     asunto=asunto,
@@ -283,6 +291,20 @@ class NvidiaLLMClient:
 
         latencia = (time.monotonic() - inicio) * 1000
         if response.status_code == 200:
+            try:
+                modelos = {
+                    str(item.get("id"))
+                    for item in response.json().get("data", [])
+                    if isinstance(item, dict)
+                }
+            except ValueError:
+                modelos = set()
+            if modelos and self.settings.nvidia_model not in modelos:
+                return (
+                    "degradado",
+                    f"modelo {self.settings.nvidia_model} no disponible",
+                    latencia,
+                )
             return "ok", "API de NVIDIA responde", latencia
         if response.status_code == 429:
             return "degradado", "API de NVIDIA limitando peticiones (429)", latencia

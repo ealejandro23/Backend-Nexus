@@ -7,6 +7,8 @@ excepciones y sin filtrar datos personales.
 
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 from asgi_lifespan import LifespanManager
@@ -141,3 +143,75 @@ async def test_health_reporta_llm_caido_sin_tumbar_el_servicio(
     assert set(datos["checks"]) == {"base_datos", "sagemaker", "cola", "llm"}
     assert datos["checks"]["llm"]["estado"] == "degradado"
     assert datos["estado"] == "degradado"
+
+
+@pytest.mark.asyncio
+async def test_llm_desactiva_razonamiento_y_parsea_json(settings: Settings) -> None:
+    visto: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        visto.update(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": '{"asunto":"Novedades para ti",'
+                            '"mensaje":"Descubre audio y video en Nexo."}'
+                        }
+                    }
+                ],
+                "usage": {"total_tokens": 42},
+            },
+        )
+
+    cliente = _cliente_con_transporte(settings, handler)
+    resultado = await cliente.generate(PERFIL, RECOMENDACIONES)
+    await cliente.close()
+
+    assert resultado.degradado is False
+    assert resultado.asunto == "Novedades para ti"
+    assert resultado.mensaje == "Descubre audio y video en Nexo."
+    assert visto["model"] == settings.nvidia_model
+    assert visto["chat_template_kwargs"] == {"enable_thinking": False}
+
+
+@pytest.mark.asyncio
+async def test_llm_sin_contenido_final_usa_respaldo(settings: Settings) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": None,
+                            "reasoning_content": "El modelo sólo razonó.",
+                        }
+                    }
+                ]
+            },
+        )
+
+    cliente = _cliente_con_transporte(settings, handler)
+    resultado = await cliente.generate(PERFIL, RECOMENDACIONES)
+    await cliente.close()
+
+    assert resultado.degradado is True
+    assert "sin contenido final" in (resultado.error or "")
+    assert "audio" in resultado.mensaje
+    assert "None" not in resultado.mensaje
+
+
+@pytest.mark.asyncio
+async def test_health_reporta_modelo_no_disponible(settings: Settings) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"data": [{"id": "otro/modelo"}]})
+
+    cliente = _cliente_con_transporte(settings, handler)
+    estado, detalle, _ = await cliente.health()
+    await cliente.close()
+
+    assert estado == "degradado"
+    assert settings.nvidia_model in detalle

@@ -65,7 +65,8 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     nvidia_api_key: str = ""
     nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
-    nvidia_model: str = "meta/llama-3.1-70b-instruct"
+    nvidia_model: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
+    llm_disable_thinking: bool = True
     llm_timeout_seconds: float = 20.0
     llm_max_wait_seconds: float = 30.0
     llm_max_retries: int = 3

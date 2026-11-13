@@ -46,4 +46,11 @@ datos/datos_tratados/
 .env.*
 !.env.example
 
+# Tests
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
+__pycache__/
+
 # Docker

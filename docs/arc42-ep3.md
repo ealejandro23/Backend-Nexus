@@ -140,8 +140,17 @@ INSERT en campanas + export S3
 | `LLM_MAX_WAIT_SECONDS` | 30 s | Tiempo máximo total del job |
 | `LLM_MAX_RETRIES` | 3 | Reintentos ante 429/5xx/timeout |
 | `LLM_BACKOFF_SECONDS` | 0.5 s | Base del backoff exponencial |
+| `LLM_DISABLE_THINKING` | `true` | Desactiva el razonamiento de Nemotron 3 y devuelve el JSON final |
 | `SAGEMAKER_TIMEOUT_SECONDS` | 4 s | Corte de la llamada a SageMaker |
 | `RABBITMQ_MAX_RETRIES` | 3 | Reintentos antes de DLQ |
+
+El modelo por defecto es **`nvidia/nemotron-3.5-lightning-30b-a3b`**. El modelo
+anterior, `meta/llama-3.1-70b-instruct`, alcanzó su fin de vida el **26-08-2026**
+y la API responde `410 Gone`, por lo que se migró. Como Nemotron 3 es un modelo
+de razonamiento, el cliente envía `chat_template_kwargs.enable_thinking=false`:
+así `content` trae el JSON final y el presupuesto de tokens no se consume
+pensando. Si la respuesta no trae `content`, el worker genera el respaldo en
+lugar de guardar el texto `None`.
 
 El backoff respeta `Retry-After` cuando NVIDIA lo envía y nunca excede el
 tiempo máximo de espera. Un error 401/403 no se reintenta: se degrada de
@@ -317,8 +326,10 @@ Notas:
 - Pipeline completo: el job se procesa, la campaña se guarda con
   `degradado=true` y `motivo_degradado` incluye el error.
 - `GET /api/health` reporta `llm: degradado` sin devolver 500.
+- Modelo de razonamiento sin `content` final → respaldo, sin guardar `None`.
+- Health reporta `degradado` si el modelo configurado no está disponible.
 
-**Resultado:** `5 passed` en `tests/test_llm_down.py`.
+**Resultado:** `8 passed` en `tests/test_llm_down.py`.
 
 #### Prueba propia - Health por dependencia
 
@@ -339,12 +350,12 @@ Notas:
 $ cd servicio-campanas
 $ python -m pytest -v --cov=app
 
-tests/test_anonymization.py ....                          [ 20%]
-tests/test_campaigns_api.py ......                        [ 50%]
-tests/test_health.py .....                                [ 75%]
-tests/test_llm_down.py .....                              [100%]
+tests/test_anonymization.py ....                          [ 17%]
+tests/test_campaigns_api.py ......                        [ 43%]
+tests/test_health.py .....                                [ 65%]
+tests/test_llm_down.py ........                           [100%]
 
-20 passed
+23 passed
 ```
 
 Cobertura de los módulos críticos:
@@ -367,6 +378,9 @@ integración manuales del despliegue.
 | Optimización | Dónde | Efecto |
 |---|---|---|
 | Timeout por intento + deadline total | `llm.py` | Ningún job queda colgado más de 30 s |
+| `enable_thinking=false` | `llm.py` | Evita `content=null` y el gasto de tokens de razonamiento |
+| Validación del modelo en health | `llm.py` | Detecta modelos EOL o no disponibles |
+| Migración a Nemotron 3.5 Lightning | `config.py` | Reemplaza el modelo Llama 3.1 EOL (410) |
 | Backoff exponencial + `Retry-After` | `llm.py` | No satura a NVIDIA ante 429 |
 | Modo degradado determinista | `llm.py` | La campaña sale aunque el LLM esté caído |
 | Prefetch 1 y ACK manual | `queue.py` | Un worker no acumula jobs lentos |
@@ -436,6 +450,26 @@ desde el tag `ep3`, se completó `.env` y `docker compose pull && up -d` levant�
 los diez contenedores. `https://localhost/api/health` y `https://localhost/`
 respondieron `200`. Por tanto, el despliegue **no requiere clonar el
 repositorio ni autenticarse en GHCR**.
+
+### 5.7 Validación con NVIDIA real
+
+Con una API key real se ejecutó el cliente `NvidiaLLMClient` del worker:
+
+| Métrica | Resultado |
+|---|---|
+| Modelo | `nvidia/nemotron-3.5-lightning-30b-a3b` |
+| `degradado` | `false` |
+| `error` | `null` |
+| `intentos` | 1 |
+| Latencia | 2.437 ms |
+| Asunto generado | “Descubre lo último en audio y video” |
+| Mensaje generado | “Hola, revisa nuestras novedades en auriculares y equipos de sonido. También tenemos opciones en video para completar tu entretenimiento.” |
+
+La misma prueba permitió detectar que el modelo anterior
+`meta/llama-3.1-70b-instruct` está EOL: la API responde `410 Gone` desde el
+26-08-2026. También se comprobó que la cuenta sólo tiene habilitados algunos
+modelos de NVIDIA; el health ahora valida que el modelo configurado exista en
+`/v1/models` y reporta `degradado` si no está disponible.
 
 ---
 

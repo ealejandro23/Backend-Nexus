@@ -129,7 +129,7 @@ class FakeLLM:
             intentos=1,
             latencia_ms=12.0,
             error="HTTP 429" if self.degradado else None,
-            modelo="meta/llama-3.1-70b-instruct",
+            modelo="nvidia/nemotron-3.5-lightning-30b-a3b",
         )
 
     async def health(self) -> tuple[str, str, float]:
