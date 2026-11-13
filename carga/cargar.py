@@ -140,6 +140,18 @@ def crear_tablas(conn):
     cur.close()
     logger.info("Tablas creadas/verificadas correctamente")
 
+def _fecha(valor):
+    """Convierte un valor de fecha a texto ISO, o None si no es válido."""
+    if valor is None:
+        return None
+    try:
+        if pd.isna(valor):
+            return None
+    except (TypeError, ValueError):
+        pass
+    return str(valor)
+
+
 def cargar_productos(conn):
     """Carga los productos desde el CSV tratado."""
     filepath = os.path.join(DATOS_DIR, "productos_limpios.csv")
@@ -162,7 +174,7 @@ def cargar_productos(conn):
         """, (
             row['sku'], row['nombre'], row['categoria'], row['marca'],
             float(row['precio_lista']), float(row['costo']), int(row['stock']),
-            bool(row['activo']), row['fecha_alta']
+            bool(row['activo']), _fecha(row['fecha_alta'])
         ))
     
     conn.commit()
@@ -190,7 +202,7 @@ def cargar_usuarios(conn):
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (usuario_id) DO NOTHING
         """, (
-            row['usuario_id'], row['fecha_registro'], row['region'],
+            row['usuario_id'], _fecha(row['fecha_registro']), row['region'],
             row['comuna'], row['canal_captacion'], bool(row['email_valido']),
             int(row['acepta_marketing']), int(row['edad'])
         ))
@@ -220,7 +232,7 @@ def cargar_transacciones(conn):
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             row['pedido_id'], int(row['linea']), row['usuario_id'],
-            row['sku'], row['fecha'], int(row['cantidad']),
+            row['sku'], _fecha(row['fecha']), int(row['cantidad']),
             float(row['precio_unitario']), float(row['descuento']),
             float(row['total']), row['canal'], row['estado']
         ))

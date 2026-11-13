@@ -23,7 +23,10 @@ import joblib
 # =============================================================================
 # CONFIGURACIÓN
 # =============================================================================
-DATA_DIR = r"C:\Users\esteb\Downloads\caso-nexus\caso\datos"
+DATA_DIR = os.getenv(
+    "DATOS_CRUDOS_DIR",
+    os.path.join(os.path.dirname(__file__), "crudos"),
+)
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "datos_tratados")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -55,6 +58,19 @@ def imprimir_perfilado(reporte, etapa="ANTES"):
 # =============================================================================
 # 2. LIMPIEZA DE DATOS
 # =============================================================================
+def normalizar_fecha(df, columna, dayfirst=True):
+    """Convierte una columna de fecha a texto ISO (YYYY-MM-DD).
+
+    Los CSV de origen mezclan formatos (DD/MM/YYYY, YYYY-MM-DD) y PostgreSQL
+    rechaza fechas ambiguas si no se normalizan antes.
+    """
+    serie = pd.to_datetime(df[columna], dayfirst=dayfirst, errors='coerce', utc=True)
+    nulos = int(serie.isnull().sum())
+    df[columna] = serie.dt.strftime('%Y-%m-%d').where(serie.notna(), None)
+    print(f"  [REGLA] {columna}: normalizada a ISO ({nulos} nulos)")
+    return df
+
+
 def limpiar_productos(df):
     """
     Limpieza de productos.csv
@@ -105,6 +121,7 @@ def limpiar_productos(df):
     
     # 2.7 Marcar productos inactivos
     df['activo'] = df['activo'].astype(bool)
+    df = normalizar_fecha(df, 'fecha_alta')
     
     filas_despues = len(df)
     print(f"  Resultado: {filas_antes} -> {filas_despues} filas")
@@ -153,6 +170,8 @@ def limpiar_transacciones(df):
     df = df[df['estado'].isin(estados_validos)]
     print(f"  [REGLA] estado: filtrados solo estados válidos {estados_validos}")
     
+    df = normalizar_fecha(df, 'fecha')
+    
     filas_despues = len(df)
     print(f"  Resultado: {filas_antes} -> {filas_despues} filas")
     
@@ -197,6 +216,8 @@ def limpiar_usuarios(df):
     df = df.drop_duplicates(subset=['usuario_id'], keep='first')
     print(f"  [REGLA] usuario_id: {duplicados} duplicados eliminados")
     
+    df = normalizar_fecha(df, 'fecha_registro')
+    
     filas_despues = len(df)
     print(f"  Resultado: {filas_antes} -> {filas_despues} filas")
     
@@ -214,7 +235,11 @@ def limpiar_clickstream(df):
     filas_antes = len(df)
     
     # 5.1 Manejar timestamps con formatos diferentes
-    df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce', format='mixed')
+    df['timestamp'] = pd.to_datetime(
+        df['timestamp'], errors='coerce', utc=True, format='mixed'
+    )
+    # Normalizar a UTC sin zona horaria para que el CSV sea estable.
+    df['timestamp'] = df['timestamp'].dt.tz_localize(None)
     nulos_timestamp = df['timestamp'].isnull().sum()
     df = df.dropna(subset=['timestamp'])
     print(f"  [REGLA] timestamp: {nulos_timestamp} con formato inválido eliminados")

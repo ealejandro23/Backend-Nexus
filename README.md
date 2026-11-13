@@ -219,15 +219,27 @@ con el `docker-compose.yml` y el `.env` en una carpeta vacía.
 2. **Editar `.env`** con `DB_PASSWORD`, `RABBITMQ_PASSWORD`, `NVIDIA_API_KEY` y
    `ANONYMIZATION_SALT`. No se versiona ni se comparte.
 
-3. **Copiar los CSV tratados** en `datos/datos_tratados/`:
+3. **Preparar los datos** (si no los tienes ya):
+   Los CSV crudos no están en este repositorio. Las dos copias idénticas del
+   equipo están en:
+   - `ealejandro23/Microservicio-IA`, rama `main`, carpeta `datos/crudos/`
+   - `ealejandro23/Microservicio-Nexus`, rama `feat/dominio-nexus`, carpeta `carga/datos/`
+
+   ```bash
+   mkdir -p datos/crudos
+   cd datos/crudos
+   for f in productos usuarios transacciones clickstream; do
+     curl -fsSLO "https://raw.githubusercontent.com/ealejandro23/Microservicio-IA/main/datos/crudos/$f.csv"
+   done
+   cd ../..
+   python datos/preparar.py   # genera datos/datos_tratados/*.csv
    ```
-   datos/datos_tratados/productos_limpios.csv
-   datos/datos_tratados/usuarios_limpios.csv
-   datos/datos_tratados/transacciones_limpias.csv
-   ```
-   No se versionan porque contienen datos personales. El servicio `carga` los
-   monta en sólo lectura y los inserta en PostgreSQL al arrancar. Si faltan, el
-   contenedor termina con error y `POST /api/campanas/{usuario}` responde `404`.
+
+   El servicio `carga` monta `datos/datos_tratados/` en sólo lectura y lo que
+   inserta son `productos_limpios.csv`, `usuarios_limpios.csv` y
+   `transacciones_limpias.csv`. No se versionan porque contienen datos
+   personales. Si la carpeta está vacía, el contenedor termina con error y
+   `POST /api/campanas/{usuario}` responde `404`.
 
 4. **Levantar el sistema** (sin `docker login`, las imágenes son públicas)
    ```bash

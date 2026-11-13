@@ -37,6 +37,7 @@ ENV/
 Thumbs.db
 
 # Project specific
+datos/crudos/
 datos/datos_tratados/
 *.pkl
 *.log
