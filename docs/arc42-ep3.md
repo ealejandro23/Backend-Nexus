@@ -412,7 +412,10 @@ Reglas cumplidas:
 - Ninguna imagen se publica si fallan los tests (`needs: [test-*]`).
 - Las imágenes se construyen en `linux/amd64`.
 - Cada imagen lleva tag `sha-`, `latest` y, al crear el tag, `ep3`.
-- El workflow usa `GHCR_PAT` si existe y cae a `GITHUB_TOKEN` si no.
+- La publicación en GHCR usa el secreto `GHCR_PAT` (PAT clásico con
+  `write:packages`). Se probó que `GITHUB_TOKEN` **no basta** en una cuenta
+  personal: el push falla con `permission_denied: write_package`. El fallback
+  del workflow existe, pero solo sirve cuando el registro lo permite.
 - `concurrency` cancela ejecuciones viejas de la misma rama.
 
 **Evidencia:** última ejecución verde del tag `ep3` en
