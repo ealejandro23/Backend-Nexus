@@ -476,6 +476,10 @@ verificado con tests, revisión manual y mediciones antes de integrarse.
 **Pipeline:** https://github.com/ealejandro23/Backend-Nexus/actions  
 **Infraestructura:** https://github.com/ealejandro23/Backend-Nexus/tree/main/infra
 
+**Visibilidad:** las siete imágenes `:ep3` son públicas. Se verificó con un
+`HEAD /v2/<repo>/manifests/ep3` anónimo (sin credenciales) y las siete
+respondieron `200`, por lo que `docker compose pull` funciona sin `docker login`.
+
 **Endpoints:**
 
 | Método | Ruta | Descripción |
