@@ -126,9 +126,15 @@ $env:S3_BUCKET="nexo-ep3-campanas-equipo2"
 
 El script:
 1. Genera `.env` desde `.env.example` (sin versionarlo).
-2. Copia `docker-compose.yml` y `.env` a `/opt/nexo` con permisos `600`.
-3. Hace `docker compose pull` de las imágenes `:ep3`.
+2. Copia **sólo** `docker-compose.yml` y `.env` a `/opt/nexo` con permisos `600`.
+3. Hace `docker compose pull` de las imágenes `:ep3` desde GHCR.
 4. Levanta los servicios con `docker compose up -d`.
+
+> El servidor **no necesita clonar el repositorio**. El compose usa únicamente
+> imágenes publicadas; el código sólo se clona si se va a desarrollar o
+> reconstruir imágenes. Como los paquetes son públicos, el `pull` funciona sin
+> `GHCR_PAT`; la variable existe sólo como respaldo si algún paquete vuelve a
+> quedar privado.
 
 ## 5. Verificar
 

@@ -27,7 +27,9 @@ AWS. La parte de Esteban Gamboa incluye:
 Inicio rápido:
 
 ```bash
-cp .env.example .env
+# No requiere clonar el repositorio ni docker login: las imágenes son públicas.
+curl -fsSLO https://raw.githubusercontent.com/ealejandro23/Backend-Nexus/ep3/docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/ealejandro23/Backend-Nexus/ep3/.env.example -o .env
 # completar NVIDIA_API_KEY, DB_PASSWORD, RABBITMQ_PASSWORD y ANONYMIZATION_SALT
 docker compose -p equipo02 pull
 docker compose -p equipo02 up -d
@@ -195,35 +197,60 @@ EP2_Nexo/
 
 ## Instalación y Ejecución
 
-### Opción 1: Con Docker (Recomendado)
+### Opción 1: Desde GHCR (recomendado, sin clonar el repositorio)
 
-1. **Clonar el repositorio**
+Las siete imágenes `:ep3` son públicas, así que **no se necesita `docker login`
+ni token**. El compose no compila nada (`build:`): sólo descarga imágenes. Basta
+con el `docker-compose.yml` y el `.env` en una carpeta vacía.
+
+1. **Descargar sólo el compose y la plantilla de variables**
    ```bash
-   git clone <url-del-repositorio>
-   cd EP2_Nexo
+   mkdir nexo-ep3 && cd nexo-ep3
+   curl -fsSLO https://raw.githubusercontent.com/ealejandro23/Backend-Nexus/ep3/docker-compose.yml
+   curl -fsSL https://raw.githubusercontent.com/ealejandro23/Backend-Nexus/ep3/.env.example -o .env
+   ```
+   En Windows PowerShell:
+   ```powershell
+   New-Item -ItemType Directory nexo-ep3 -Force | Out-Null; Set-Location nexo-ep3
+   curl.exe -fsSLO https://raw.githubusercontent.com/ealejandro23/Backend-Nexus/ep3/docker-compose.yml
+   curl.exe -fsSL https://raw.githubusercontent.com/ealejandro23/Backend-Nexus/ep3/.env.example -o .env
    ```
 
-2. **Configurar variables de entorno**
-   ```bash
-   cp .env.example .env
-   # Editar .env si es necesario
-   ```
+2. **Editar `.env`** con `DB_PASSWORD`, `RABBITMQ_PASSWORD`, `NVIDIA_API_KEY` y
+   `ANONYMIZATION_SALT`. No se versiona ni se comparte.
 
-3. **Levantar el sistema**
+3. **Levantar el sistema** (sin `docker login`, las imágenes son públicas)
    ```bash
    docker compose -p equipo02 pull
    docker compose -p equipo02 up -d
    ```
 
 4. **Verificar que funciona**
-   ```
-   Abrir http://localhost:8080 en el navegador
+   ```bash
+   curl -k https://localhost/api/health
+   # Navegador: https://localhost
    ```
 
 5. **Detener el sistema**
    ```bash
    docker compose -p equipo02 down -v
    ```
+
+> Si algún `pull` responde `denied`, ese paquete quedó privado: haz
+> `docker login ghcr.io` con un PAT que tenga `read:packages`, o cambia su
+> visibilidad a pública en GitHub → Packages. Con la entrega actual no ocurre.
+
+### Opción 1b: Desarrollo (clonar el repositorio)
+
+Sólo necesitas clonar si vas a modificar código, ejecutar los tests o
+reconstruir imágenes localmente:
+
+```bash
+git clone https://github.com/ealejandro23/Backend-Nexus.git
+cd Backend-Nexus
+cp .env.example .env
+docker compose -p equipo02 up -d --build
+```
 
 ### Opción 2: Desarrollo local (sin Docker)
 

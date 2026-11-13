@@ -430,6 +430,13 @@ Esto valida en contenedores reales, a través del borde TLS, el enrutamiento
 gateway, el encolado y consumo por el worker, la anonimización previa al LLM y
 el modo degradado de la prueba 6.
 
+**Consumo puro desde GHCR:** en una carpeta vacía, con `docker logout ghcr.io`
+(sin credenciales), se descargaron sólo `docker-compose.yml` y `.env.example`
+desde el tag `ep3`, se completó `.env` y `docker compose pull && up -d` levantó
+los diez contenedores. `https://localhost/api/health` y `https://localhost/`
+respondieron `200`. Por tanto, el despliegue **no requiere clonar el
+repositorio ni autenticarse en GHCR**.
+
 ---
 
 ## Anexo A: Referencias
