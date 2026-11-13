@@ -421,13 +421,15 @@ Reglas cumplidas:
   aparece como *skipped* a propósito; no es un fallo.
 - `concurrency` cancela ejecuciones viejas de la misma rama.
 
-**Evidencia:** última ejecución verde del tag `ep3` en
-https://github.com/ealejandro23/Backend-Nexus/actions/runs/43343991741
-(commit `2fe58e4`: tests de campañas y datos, builds `backend`, `campanas` y
-`edge`, y job `tag-ep3` que publica las imágenes `:ep3` en `linux/amd64`).
+**Evidencia:** ejecución verde del tag `ep3` en
+https://github.com/ealejandro23/Backend-Nexus/actions/runs/43345391147
+(commit `3c81a7b`: tests de campañas y datos, builds `backend`, `campanas` y
+`edge`, y los tres jobs `tag-ep3` que publican las imágenes `:ep3` en
+`linux/amd64`). Los 8 jobs terminaron en `success`.
 La imagen `ghcr.io/ealejandro23/campanas:ep3` se inspeccionó tras publicarse y
 contiene el modelo `nvidia/nemotron-3.5-lightning-30b-a3b`,
-`LLM_DISABLE_THINKING=true` y la validación del modelo en `/api/health`.
+`LLM_DISABLE_THINKING=true` y la validación del modelo en `/api/health`; su
+etiqueta `org.opencontainers.image.revision` apunta al commit del tag.
 
 ### 5.6 Prueba de humo end-to-end
 
