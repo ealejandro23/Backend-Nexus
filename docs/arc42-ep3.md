@@ -416,6 +416,9 @@ Reglas cumplidas:
   `write:packages`). Se probó que `GITHUB_TOKEN` **no basta** en una cuenta
   personal: el push falla con `permission_denied: write_package`. El fallback
   del workflow existe, pero solo sirve cuando el registro lo permite.
+- El job `tag-ep3` sólo se ejecuta en pushes de tag
+  (`if: startsWith(github.ref, 'refs/tags/ep3')`). En un push a `main`
+  aparece como *skipped* a propósito; no es un fallo.
 - `concurrency` cancela ejecuciones viejas de la misma rama.
 
 **Evidencia:** última ejecución verde del tag `ep3` en
