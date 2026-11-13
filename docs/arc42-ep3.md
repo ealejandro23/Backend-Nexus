@@ -415,10 +415,13 @@ Reglas cumplidas:
 - El workflow usa `GHCR_PAT` si existe y cae a `GITHUB_TOKEN` si no.
 - `concurrency` cancela ejecuciones viejas de la misma rama.
 
-**Evidencia:** ejecución verde del tag `ep3` en
-https://github.com/ealejandro23/Backend-Nexus/actions/runs/43140534432
-(tests de campañas y datos, builds `backend`, `campanas` y `edge`, y job
-`tag-ep3` que publica las imágenes `:ep3` en `linux/amd64`).
+**Evidencia:** última ejecución verde del tag `ep3` en
+https://github.com/ealejandro23/Backend-Nexus/actions/runs/43343991741
+(commit `2fe58e4`: tests de campañas y datos, builds `backend`, `campanas` y
+`edge`, y job `tag-ep3` que publica las imágenes `:ep3` en `linux/amd64`).
+La imagen `ghcr.io/ealejandro23/campanas:ep3` se inspeccionó tras publicarse y
+contiene el modelo `nvidia/nemotron-3.5-lightning-30b-a3b`,
+`LLM_DISABLE_THINKING=true` y la validación del modelo en `/api/health`.
 
 ### 5.6 Prueba de humo end-to-end
 
