@@ -73,6 +73,12 @@ try {
     & scp @sshOpts $tmpEnv "${destino}:${RemoteDir}/.env"
     & ssh @sshOpts $destino "chmod 600 '$RemoteDir/.env'"
 
+    if (Test-Path "datos\datos_tratados") {
+        Write-Host "==> Copiando CSV tratados"
+        & ssh @sshOpts $destino "mkdir -p '$RemoteDir/datos'"
+        & scp -r @sshOpts "datos/datos_tratados" "${destino}:${RemoteDir}/datos/"
+    }
+
     if ($env:GHCR_PAT) {
         Write-Host "==> Login en GHCR"
         $env:GHCR_PAT | & ssh @sshOpts $destino "docker login ghcr.io -u '$($env:GHCR_USER)' --password-stdin"

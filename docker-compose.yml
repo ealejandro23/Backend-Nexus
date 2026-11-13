@@ -384,6 +384,11 @@ services:
     env_file: *env-file
     environment:
       <<: *common-env
+      DATOS_DIR: /app/datos/datos_tratados
+    volumes:
+      # Los CSV tratados no se versionan (contienen datos personales).
+      # Se montan en sólo lectura desde el host.
+      - ./datos/datos_tratados:/app/datos/datos_tratados:ro
     depends_on:
       db:
         condition: service_healthy

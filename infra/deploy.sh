@@ -72,6 +72,12 @@ scp "${SSH_OPTS[@]}" docker-compose.yml "$SSH_USER@$EC2_HOST:$REMOTE_DIR/docker-
 scp "${SSH_OPTS[@]}" "$TMP_ENV" "$SSH_USER@$EC2_HOST:$REMOTE_DIR/.env"
 ssh "${SSH_OPTS[@]}" "$SSH_USER@$EC2_HOST" "chmod 600 '$REMOTE_DIR/.env'"
 
+if [[ -d datos/datos_tratados ]]; then
+  echo "==> Copiando CSV tratados"
+  ssh "${SSH_OPTS[@]}" "$SSH_USER@$EC2_HOST" "mkdir -p '$REMOTE_DIR/datos'"
+  scp -r "${SSH_OPTS[@]}" datos/datos_tratados "$SSH_USER@$EC2_HOST:$REMOTE_DIR/datos/"
+fi
+
 if [[ -n "$GHCR_PAT" ]]; then
   echo "==> Login en GHCR"
   printf '%s' "$GHCR_PAT" | ssh "${SSH_OPTS[@]}" "$SSH_USER@$EC2_HOST" \

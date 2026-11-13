@@ -219,19 +219,29 @@ con el `docker-compose.yml` y el `.env` en una carpeta vacía.
 2. **Editar `.env`** con `DB_PASSWORD`, `RABBITMQ_PASSWORD`, `NVIDIA_API_KEY` y
    `ANONYMIZATION_SALT`. No se versiona ni se comparte.
 
-3. **Levantar el sistema** (sin `docker login`, las imágenes son públicas)
+3. **Copiar los CSV tratados** en `datos/datos_tratados/`:
+   ```
+   datos/datos_tratados/productos_limpios.csv
+   datos/datos_tratados/usuarios_limpios.csv
+   datos/datos_tratados/transacciones_limpias.csv
+   ```
+   No se versionan porque contienen datos personales. El servicio `carga` los
+   monta en sólo lectura y los inserta en PostgreSQL al arrancar. Si faltan, el
+   contenedor termina con error y `POST /api/campanas/{usuario}` responde `404`.
+
+4. **Levantar el sistema** (sin `docker login`, las imágenes son públicas)
    ```bash
    docker compose -p equipo02 pull
    docker compose -p equipo02 up -d
    ```
 
-4. **Verificar que funciona**
+5. **Verificar que funciona**
    ```bash
    curl -k https://localhost/api/health
    # Navegador: https://localhost
    ```
 
-5. **Detener el sistema**
+6. **Detener el sistema**
    ```bash
    docker compose -p equipo02 down -v
    ```

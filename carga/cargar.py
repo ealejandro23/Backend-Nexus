@@ -13,6 +13,7 @@ Fecha: 2026
 import pandas as pd
 import psycopg2
 import os
+import sys
 import time
 import logging
 
@@ -34,7 +35,15 @@ DB_NAME = os.getenv("DB_NAME", "nexo")
 DB_USER = os.getenv("DB_USER", "nexo")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "nexo123")
 
-DATOS_DIR = os.path.join(os.path.dirname(__file__), "..", "datos", "datos_tratados")
+DATOS_DIR = os.getenv(
+    "DATOS_DIR",
+    os.path.join(os.path.dirname(__file__), "..", "datos", "datos_tratados"),
+)
+CSV_REQUERIDOS = (
+    "productos_limpios.csv",
+    "usuarios_limpios.csv",
+    "transacciones_limpias.csv",
+)
 
 # =============================================================================
 # FUNCIONES
@@ -237,16 +246,37 @@ def main():
         total_productos = cargar_productos(conn)
         total_usuarios = cargar_usuarios(conn)
         total_transacciones = cargar_transacciones(conn)
-        
-        logger.info("="*60)
-        logger.info("CARGA COMPLETADA EXITOSAMENTE")
+
+        faltantes = [
+            nombre
+            for nombre in CSV_REQUERIDOS
+            if not os.path.exists(os.path.join(DATOS_DIR, nombre))
+        ]
+        total = total_productos + total_usuarios + total_transacciones
+
+        logger.info("=" * 60)
         logger.info(f"  Productos: {total_productos}")
         logger.info(f"  Usuarios: {total_usuarios}")
         logger.info(f"  Transacciones: {total_transacciones}")
-        logger.info("="*60)
-        
+        if faltantes:
+            logger.warning("  CSV faltantes: %s", ", ".join(faltantes))
+        logger.info("=" * 60)
+
+        if total == 0:
+            logger.error(
+                "CARGA SIN DATOS: no se insertó ninguna fila. "
+                "Copia los CSV tratados en %s (o monta esa carpeta como "
+                "volumen). Sin datos, POST /api/campanas/{usuario} "
+                "responderá 404.",
+                os.path.abspath(DATOS_DIR),
+            )
+            return 1
+
+        logger.info("CARGA COMPLETADA EXITOSAMENTE")
+        return 0
+
     finally:
         conn.close()
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
