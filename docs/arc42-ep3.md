@@ -422,14 +422,16 @@ Reglas cumplidas:
 - `concurrency` cancela ejecuciones viejas de la misma rama.
 
 **Evidencia:** ejecución verde del tag `ep3` en
-https://github.com/ealejandro23/Backend-Nexus/actions/runs/43345391147
-(commit `3c81a7b`: tests de campañas y datos, builds `backend`, `campanas` y
+https://github.com/ealejandro23/Backend-Nexus/actions/runs/43350151403
+(commit `e355c7f`: tests de campañas y datos, builds `backend`, `campanas` y
 `edge`, y los tres jobs `tag-ep3` que publican las imágenes `:ep3` en
 `linux/amd64`). Los 8 jobs terminaron en `success`.
 La imagen `ghcr.io/ealejandro23/campanas:ep3` se inspeccionó tras publicarse y
 contiene el modelo `nvidia/nemotron-3.5-lightning-30b-a3b`,
 `LLM_DISABLE_THINKING=true` y la validación del modelo en `/api/health`; su
-etiqueta `org.opencontainers.image.revision` apunta al commit del tag.
+etiqueta `org.opencontainers.image.revision` apunta al commit del tag. Lo mismo
+verifica `ghcr.io/ealejandro23/backend:ep3`, que incluye la carga de datos con
+fechas normalizadas.
 
 ### 5.6 Prueba de humo end-to-end
 
