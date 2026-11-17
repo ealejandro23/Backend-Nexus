@@ -527,7 +527,7 @@ Output (probabilidad 0-1)
 | `servicio-campanas` (API) | FastAPI en `:8090`; encola jobs y expone health |
 | `servicio-campanas-worker` | Consume RabbitMQ y llama a SageMaker + NVIDIA |
 | `rabbitmq` | Cola durable `campanas` + DLQ `campanas.dlq` |
-| `edge` | Nginx con TLS, publica 80/443, enruta `/api/campanas` y `/api/health` |
+| `edge` | Caddy con TLS automático (Let's Encrypt), publica 80/443, enruta `/api/campanas` y `/api/health` |
 
 ### Flujo de una campaña
 

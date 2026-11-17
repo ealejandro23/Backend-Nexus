@@ -14,7 +14,7 @@ Internet
 │ LabInstanceProfile                                           │
 │                                                              │
 │  ┌──────────────┐    ┌──────────────┐    ┌────────────────┐  │
-│  │ edge (Nginx) │───►│ gateway:8080 │───►│ front / ia /   │  │
+│  │ edge (Caddy) │───►│ gateway:8080 │───►│ front / ia /   │  │
 │  │ TLS 80/443   │    └──────────────┘    │ dominio x2     │  │
 │  │              │───►┌──────────────┐    └────────────────┘  │
 │  │              │    │ campanas:8090│───► PostgreSQL        │
@@ -98,6 +98,7 @@ Desde tu computador, en la raíz del repositorio:
 
 ```bash
 export EC2_HOST=54.1.2.3
+export DOMAIN=3-85-10-20.sslip.io   # IP elástica con guiones + .sslip.io
 export SSH_KEY=~/.ssh/nexo.pem
 export DB_PASSWORD='...'
 export RABBITMQ_PASSWORD='...'
@@ -113,6 +114,7 @@ En Windows:
 
 ```powershell
 $env:EC2_HOST="54.1.2.3"
+$env:DOMAIN="3-85-10-20.sslip.io"
 $env:SSH_KEY="$HOME\.ssh\nexo.pem"
 $env:DB_PASSWORD="..."
 $env:RABBITMQ_PASSWORD="..."
@@ -135,20 +137,33 @@ El script:
 > reconstruir imágenes. Como los paquetes son públicos, el `pull` funciona sin
 > `GHCR_PAT`; la variable existe sólo como respaldo si algún paquete vuelve a
 > quedar privado.
+>
+> El dominio debe resolver a la IP elástica y el puerto 80 debe estar abierto:
+> Let's Encrypt valida por HTTP antes de emitir el certificado. Los volúmenes
+> `caddy-data` y `caddy-config` conservan el certificado entre reinicios.
 
 ## 5. Verificar
 
+El dominio se calcula con la IP elástica: cambia los puntos por guiones y agrega
+`.sslip.io` (por ejemplo, `3.85.10.20` → `3-85-10-20.sslip.io`). Caddy emite el
+certificado la primera vez; puede tardar unos segundos.
+
 ```bash
+docker compose logs edge --tail 20   # buscar: certificate obtained successfully
+
 # Health público (DB, SageMaker, cola y LLM por separado)
-curl -k https://<IP>/api/health
+curl -s https://3-85-10-20.sslip.io/api/health
+
+# HTTP debe redirigir con 308
+curl -sI http://3-85-10-20.sslip.io/
 
 # Encolar una campaña
-curl -k -X POST https://<IP>/api/campanas/U100000 \
+curl -s -X POST https://3-85-10-20.sslip.io/api/campanas/U100000 \
   -H "Content-Type: application/json" \
   -d '{"canal":"email","tono":"cercano"}'
 
 # Consultar el resultado
-curl -k https://<IP>/api/campanas/U100000
+curl -s https://3-85-10-20.sslip.io/api/campanas/U100000
 ```
 
 Respuesta esperada de health:
@@ -196,4 +211,4 @@ Notas:
 | `health` con `llm: no_configurado` | Falta `NVIDIA_API_KEY` | Completar `.env` y `docker compose up -d` |
 | `health` con `sagemaker: no_configurado` | Falta endpoint | Configurar `SAGEMAKER_ENDPOINT_NAME` o dejar el fallback local |
 | `502` en `/api/campanas` | Worker/API caídos | `docker compose logs campanas campanas-worker` |
-| Certificado inválido | Certificado autofirmado | Reemplazar `/etc/nginx/certs` por Let's Encrypt o usar `curl -k` |
+| Certificado no emitido | `DOMAIN` mal escrito, IP elástica no asociada, puerto 80 cerrado o demasiados intentos fallidos | Revisar `docker compose logs edge`, corregir DNS/SG y esperar a que pase el bloqueo de Let's Encrypt |

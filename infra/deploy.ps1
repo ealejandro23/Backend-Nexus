@@ -13,7 +13,7 @@ param(
     [string]$SshUser = $(if ($env:SSH_USER) { $env:SSH_USER } else { "ec2-user" }),
     [string]$RemoteDir = $(if ($env:REMOTE_DIR) { $env:REMOTE_DIR } else { "/opt/nexo" }),
     [string]$ImageTag = $(if ($env:IMAGE_TAG) { $env:IMAGE_TAG } else { "ep3" }),
-    [string]$Domain = $(if ($env:DOMAIN) { $env:DOMAIN } else { "nexo.local" })
+    [string]$Domain = $(if ($env:DOMAIN) { $env:DOMAIN } else { "localhost" })
 )
 
 $ErrorActionPreference = "Stop"

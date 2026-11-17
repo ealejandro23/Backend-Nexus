@@ -1,0 +1,71 @@
+# Borde de Nexo: TLS automático (Let's Encrypt) + enrutado.
+# {$DOMAIN} se sustituye con la variable de entorno que inyecta docker-compose.
+# Con DOMAIN=localhost Caddy usa su certificado de desarrollo local.
+
+# HTTP: health sin redirección y 308 permanente para todo lo demás.
+# El puerto 80 debe seguir abierto: Let's Encrypt valida el dominio por ahí.
+:80 {
+	@healthz path /healthz
+	handle @healthz {
+		header -Server
+		respond "ok\n" 200
+	}
+
+	handle {
+		redir https://{host}{uri} 308
+	}
+}
+
+# HTTPS: mismo enrutado que tenía Nginx.
+{$DOMAIN:localhost} {
+	tls {
+		protocols tls1.2 tls1.3
+	}
+
+	header {
+		-Server
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy no-referrer-when-downgrade
+	}
+
+	# request_body está antes de reverse_proxy en el orden por defecto:
+	# un cuerpo mayor a 2 MB se rechaza con 413 antes de hacer proxy.
+	request_body {
+		max_size 2MB
+	}
+
+	handle /healthz {
+		respond "ok\n" 200
+	}
+
+	handle /api/health {
+		reverse_proxy campanas:8090 {
+			header_up X-Real-IP {remote_host}
+			transport http {
+				dial_timeout 5s
+				response_header_timeout 15s
+			}
+		}
+	}
+
+	handle /api/campanas/* {
+		reverse_proxy campanas:8090 {
+			header_up X-Real-IP {remote_host}
+			transport http {
+				dial_timeout 5s
+				read_timeout 60s
+			}
+		}
+	}
+
+	handle {
+		reverse_proxy gateway:8080 {
+			header_up X-Real-IP {remote_host}
+			transport http {
+				dial_timeout 5s
+				read_timeout 60s
+			}
+		}
+	}
+}

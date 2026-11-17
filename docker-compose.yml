@@ -38,16 +38,19 @@ x-common-env: &common-env
 
 services:
   # ===========================================================================
-  # BORDE - Nginx con TLS autofirmado. Único servicio con puertos publicados.
+  # BORDE - Caddy con TLS automático (Let's Encrypt). Único servicio con puertos publicados.
   # ===========================================================================
   edge:
     image: ghcr.io/ealejandro23/edge:${IMAGE_TAG:-ep3}
     container_name: equipo02-edge
     environment:
-      DOMAIN: ${DOMAIN:-nexo.local}
+      DOMAIN: ${DOMAIN:-localhost}
     ports:
       - "80:80"
       - "443:443"
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
     depends_on:
       gateway:
         condition: service_healthy
@@ -58,7 +61,7 @@ services:
     restart: unless-stopped
     logging: *default-logging
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://127.0.0.1/healthz >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/healthz >/dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -416,4 +419,10 @@ volumes:
   db-data:
     driver: local
   rabbitmq-data:
+    driver: local
+  # Caddy guarda aquí el certificado y su estado de ACME: sin estos volúmenes
+  # pediría el certificado en cada reinicio y Let's Encrypt limita los intentos.
+  caddy-data:
+    driver: local
+  caddy-config:
     driver: local
