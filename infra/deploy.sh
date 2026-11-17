@@ -57,6 +57,8 @@ set_env() {
 
 set_env IMAGE_TAG "$IMAGE_TAG"
 set_env DOMAIN "$DOMAIN"
+set_env GATEWAY_URL "${GATEWAY_URL:-http://gateway:8080}"
+set_env API_GATEWAY_URL "${API_GATEWAY_URL:-http://gateway:8080}"
 set_env DB_PASSWORD "$DB_PASSWORD"
 set_env RABBITMQ_PASSWORD "$RABBITMQ_PASSWORD"
 set_env NVIDIA_API_KEY "$NVIDIA_API_KEY"

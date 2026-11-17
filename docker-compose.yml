@@ -113,7 +113,10 @@ services:
     env_file: *env-file
     environment:
       <<: *common-env
-      API_GATEWAY_URL: http://gateway:8080
+      # Frontend-Nexus/main.py lee GATEWAY_URL; API_GATEWAY_URL se mantiene
+      # por compatibilidad con despliegues anteriores.
+      GATEWAY_URL: ${GATEWAY_URL:-http://gateway:8080}
+      API_GATEWAY_URL: ${API_GATEWAY_URL:-http://gateway:8080}
     expose:
       - "8000"
     networks:
