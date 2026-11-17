@@ -199,7 +199,7 @@ servicios externos.
         │ LabInstanceProfile · SG 80/443 + 22 MiIP    │
         │                                             │
         │  ┌───────────────────────────────────────┐  │
-        │  │ edge (Nginx TLS) :80/:443             │  │
+        │  │ edge (Caddy TLS automático) :80/:443  │  │
         │  └───────┬───────────────────────┬───────┘  │
         │          │ /                     │ /api/*  │
         │          ▼                       ▼         │
