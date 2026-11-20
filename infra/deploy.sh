@@ -4,7 +4,7 @@
 # Uso:
 #   EC2_HOST=54.1.2.3 SSH_KEY=~/.ssh/nexo.pem ./infra/deploy.sh
 # Variables obligatorias: EC2_HOST, SSH_KEY, DB_PASSWORD, RABBITMQ_PASSWORD,
-#                         NVIDIA_API_KEY, ANONYMIZATION_SALT
+#                         NVIDIA_API_KEY, ANONYMIZATION_SALT, API_KEY
 # =============================================================================
 set -euo pipefail
 
@@ -19,6 +19,8 @@ DB_PASSWORD="${DB_PASSWORD:-}"
 RABBITMQ_PASSWORD="${RABBITMQ_PASSWORD:-}"
 NVIDIA_API_KEY="${NVIDIA_API_KEY:-}"
 ANONYMIZATION_SALT="${ANONYMIZATION_SALT:-}"
+API_KEY="${API_KEY:-}"            # clave X-API-Key que exige el gateway
+RATE_LIMIT="${RATE_LIMIT:-10r/s}"
 SAGEMAKER_ENDPOINT_NAME="${SAGEMAKER_ENDPOINT_NAME:-}"
 S3_BUCKET="${S3_BUCKET:-}"
 GHCR_USER="${GHCR_USER:-}"
@@ -28,7 +30,7 @@ if [[ -z "$EC2_HOST" || -z "$SSH_KEY" ]]; then
   echo "ERROR: define EC2_HOST y SSH_KEY" >&2
   exit 1
 fi
-for requerido in DB_PASSWORD RABBITMQ_PASSWORD NVIDIA_API_KEY ANONYMIZATION_SALT; do
+for requerido in DB_PASSWORD RABBITMQ_PASSWORD NVIDIA_API_KEY ANONYMIZATION_SALT API_KEY; do
   if [[ -z "${!requerido}" ]]; then
     echo "ERROR: falta la variable $requerido" >&2
     exit 1
@@ -63,6 +65,8 @@ set_env DB_PASSWORD "$DB_PASSWORD"
 set_env RABBITMQ_PASSWORD "$RABBITMQ_PASSWORD"
 set_env NVIDIA_API_KEY "$NVIDIA_API_KEY"
 set_env ANONYMIZATION_SALT "$ANONYMIZATION_SALT"
+set_env API_KEY "$API_KEY"
+set_env RATE_LIMIT "$RATE_LIMIT"
 set_env SAGEMAKER_ENDPOINT_NAME "$SAGEMAKER_ENDPOINT_NAME"
 set_env S3_BUCKET "$S3_BUCKET"
 
