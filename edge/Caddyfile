@@ -49,15 +49,8 @@
 		}
 	}
 
-	handle /api/campanas/* {
-		reverse_proxy campanas:8090 {
-			header_up X-Real-IP {remote_host}
-			transport http {
-				dial_timeout 5s
-				read_timeout 60s
-			}
-		}
-	}
+	# /api/campanas/* pasa por el gateway: ahí se valida X-API-Key (401),
+	# el rate limiting (429) y el tamaño máximo (413).
 
 	handle {
 		reverse_proxy gateway:8080 {
