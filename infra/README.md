@@ -104,6 +104,7 @@ export DB_PASSWORD='...'
 export RABBITMQ_PASSWORD='...'
 export NVIDIA_API_KEY='nvapi-...'
 export ANONYMIZATION_SALT="$(openssl rand -hex 24)"
+export API_KEY="$(openssl rand -hex 24)"   # X-API-Key del gateway; compartirla por privado
 export SAGEMAKER_ENDPOINT_NAME=nexo-propension-ep3
 export S3_BUCKET=nexo-ep3-campanas-equipo2
 
@@ -120,6 +121,7 @@ $env:DB_PASSWORD="..."
 $env:RABBITMQ_PASSWORD="..."
 $env:NVIDIA_API_KEY="nvapi-..."
 $env:ANONYMIZATION_SALT="..."
+$env:API_KEY="..."   # X-API-Key del gateway (mínimo 16 caracteres)
 $env:SAGEMAKER_ENDPOINT_NAME="nexo-propension-ep3"
 $env:S3_BUCKET="nexo-ep3-campanas-equipo2"
 

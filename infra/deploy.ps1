@@ -3,7 +3,7 @@
 # Uso:
 #   $env:EC2_HOST="54.1.2.3"; $env:SSH_KEY="$HOME\.ssh\nexo.pem"
 #   $env:DB_PASSWORD="..."; $env:RABBITMQ_PASSWORD="..."
-#   $env:NVIDIA_API_KEY="..."; $env:ANONYMIZATION_SALT="..."
+#   $env:NVIDIA_API_KEY="..."; $env:ANONYMIZATION_SALT="..."; $env:API_KEY="..."
 #   .\infra\deploy.ps1
 # =============================================================================
 [CmdletBinding()]
@@ -29,6 +29,7 @@ $requeridos = @{
     RABBITMQ_PASSWORD    = $env:RABBITMQ_PASSWORD
     NVIDIA_API_KEY       = $env:NVIDIA_API_KEY
     ANONYMIZATION_SALT   = $env:ANONYMIZATION_SALT
+    API_KEY              = $env:API_KEY
 }
 foreach ($clave in $requeridos.Keys) {
     if ([string]::IsNullOrWhiteSpace($requeridos[$clave])) {
@@ -48,6 +49,8 @@ $reemplazos = @{
     "RABBITMQ_PASSWORD"        = $env:RABBITMQ_PASSWORD
     "NVIDIA_API_KEY"           = $env:NVIDIA_API_KEY
     "ANONYMIZATION_SALT"       = $env:ANONYMIZATION_SALT
+    "API_KEY"                  = $env:API_KEY
+    "RATE_LIMIT"               = $(if ($env:RATE_LIMIT) { $env:RATE_LIMIT } else { "10r/s" })
     "SAGEMAKER_ENDPOINT_NAME"  = $(if ($env:SAGEMAKER_ENDPOINT_NAME) { $env:SAGEMAKER_ENDPOINT_NAME } else { "" })
     "S3_BUCKET"                = $(if ($env:S3_BUCKET) { $env:S3_BUCKET } else { "" })
 }
