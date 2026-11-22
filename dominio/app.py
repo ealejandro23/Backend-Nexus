@@ -1,3 +1,4 @@
+import json
 import os
 import threading
 from contextlib import contextmanager
@@ -402,6 +403,10 @@ def crear_prediccion(payload: dict[str, Any]) -> dict[str, Any]:
             connection.commit()
     except psycopg2.Error as exc:
         raise HTTPException(status_code=503, detail="No fue posible guardar prediccion") from exc
+
+    print(json.dumps({"evento": "prediccion", "id": pred_id, "usuario_id": usuario_id, "categoria": categoria,
+                      "probabilidad": round(prob, 4), "origen": origen, "latencia_ms": latencia_ms,
+                      "version_modelo": version_modelo, "motivo_reserva": motivo_reserva}), flush=True)
 
     return {
         "probabilidad_compra": prob,
