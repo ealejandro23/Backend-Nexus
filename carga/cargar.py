@@ -136,6 +136,33 @@ def crear_tablas(conn):
         )
     """)
     
+    # Tabla de clickstream (vistas, clics y carrito): la usa GET /api/recomendaciones del dominio.
+    # Sin esta tabla la consulta de recomendaciones falla con 503.
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS clickstream (
+            id SERIAL PRIMARY KEY,
+            evento_id VARCHAR(50),
+            sesion_id VARCHAR(50),
+            usuario_id VARCHAR(50),
+            timestamp TIMESTAMP,
+            tipo_evento VARCHAR(50),
+            sku VARCHAR(50),
+            termino_busqueda VARCHAR(200),
+            dispositivo VARCHAR(50),
+            es_visitante BOOLEAN
+        )
+    """)
+
+    # Índices para las consultas por usuario, pedido y producto del dominio
+    # (sin ellos cada predicción recorre todas las transacciones).
+    for indice in (
+        "CREATE INDEX IF NOT EXISTS idx_transacciones_usuario ON transacciones (usuario_id)",
+        "CREATE INDEX IF NOT EXISTS idx_transacciones_pedido ON transacciones (pedido_id)",
+        "CREATE INDEX IF NOT EXISTS idx_transacciones_sku ON transacciones (sku)",
+        "CREATE INDEX IF NOT EXISTS idx_clickstream_usuario ON clickstream (usuario_id)",
+    ):
+        cur.execute(indice)
+
     conn.commit()
     cur.close()
     logger.info("Tablas creadas/verificadas correctamente")
@@ -242,6 +269,48 @@ def cargar_transacciones(conn):
     logger.info(f"Transacciones cargadas: {len(df)} registros")
     return len(df)
 
+def _texto(valor):
+    """Texto o None si el valor viene vacío en el CSV."""
+    try:
+        if valor is None or pd.isna(valor) or str(valor).strip() == "":
+            return None
+    except (TypeError, ValueError):
+        pass
+    return str(valor)
+
+
+def cargar_clickstream(conn):
+    """Carga el clickstream desde el CSV tratado (opcional: si no está, se omite)."""
+    filepath = os.path.join(DATOS_DIR, "clickstream_limpio.csv")
+    if not os.path.exists(filepath):
+        logger.warning(f"Archivo no encontrado (opcional): {filepath}")
+        return 0
+
+    from psycopg2.extras import execute_values
+
+    df = pd.read_csv(filepath)
+    filas = [
+        (
+            _texto(row.get("evento_id")), _texto(row.get("sesion_id")), _texto(row.get("usuario_id")),
+            _fecha(row.get("timestamp")), _texto(row.get("tipo_evento")), _texto(row.get("sku")),
+            (_texto(row.get("termino_busqueda")) or "")[:200] or None, _texto(row.get("dispositivo")),
+            str(row.get("es_visitante")).strip().lower() == "true",
+        )
+        for _, row in df.iterrows()
+    ]
+    cur = conn.cursor()
+    cur.execute("TRUNCATE TABLE clickstream")
+    execute_values(cur, """
+        INSERT INTO clickstream (evento_id, sesion_id, usuario_id, timestamp, tipo_evento, sku,
+                                 termino_busqueda, dispositivo, es_visitante)
+        VALUES %s
+    """, filas, page_size=1000)
+    conn.commit()
+    cur.close()
+    logger.info(f"Clickstream cargado: {len(filas)} registros")
+    return len(filas)
+
+
 def main():
     logger.info("="*60)
     logger.info("CARGA DE DATOS - NEXO RECOMMENDER")
@@ -258,6 +327,7 @@ def main():
         total_productos = cargar_productos(conn)
         total_usuarios = cargar_usuarios(conn)
         total_transacciones = cargar_transacciones(conn)
+        total_clickstream = cargar_clickstream(conn)
 
         faltantes = [
             nombre
@@ -270,6 +340,7 @@ def main():
         logger.info(f"  Productos: {total_productos}")
         logger.info(f"  Usuarios: {total_usuarios}")
         logger.info(f"  Transacciones: {total_transacciones}")
+        logger.info(f"  Clickstream: {total_clickstream}")
         if faltantes:
             logger.warning("  CSV faltantes: %s", ", ".join(faltantes))
         logger.info("=" * 60)
