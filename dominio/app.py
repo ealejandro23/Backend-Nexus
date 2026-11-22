@@ -125,10 +125,11 @@ IA_SERVICE_URL = os.getenv("IA_SERVICE_URL", "http://ia:8000")
 ENDPOINT_MODELO = os.getenv("ENDPOINT_MODELO", "")
 TIMEOUT_MODELO_MS = int(os.getenv("TIMEOUT_MODELO_MS", "200"))
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
-# Mismo orden que datos/datos_tratados/feature_cols.json (con el que se entrena en SageMaker)
+# Variables del modelo en SageMaker (mismo orden que sagemaker/desplegar.py).
+# Se excluyen num_compras_categoria, total_gastado_categoria y dias_ultima_compra:
+# la etiqueta es "compró en la categoría" y esas tres salen de esas mismas compras (fuga).
 COLUMNAS_MODELO = [
-    "num_compras_categoria", "num_vistas_categoria", "num_clics_categoria",
-    "total_gastado_categoria", "dias_ultima_compra", "frecuencia_compra",
+    "num_vistas_categoria", "num_clics_categoria", "frecuencia_compra",
     "ticket_promedio", "edad", "acepta_marketing",
 ]
 _cliente_sagemaker = None
@@ -295,6 +296,16 @@ def crear_prediccion(payload: dict[str, Any]) -> dict[str, Any]:
                 ticket_promedio_raw = float(cursor.fetchone()[0] or 0)
                 if ticket_promedio_raw != ticket_promedio_raw:
                     ticket_promedio_raw = 0.0
+
+                # Navegación en la categoría (igual que datos/preparar.py: eventos 'vista' y 'clic')
+                cursor.execute(
+                    """SELECT COUNT(*) FILTER (WHERE LOWER(TRIM(c.tipo_evento)) = 'vista'),
+                              COUNT(*) FILTER (WHERE LOWER(TRIM(c.tipo_evento)) = 'clic')
+                       FROM clickstream c JOIN productos p ON c.sku = p.sku
+                       WHERE c.usuario_id = %s AND LOWER(TRIM(p.categoria)) = LOWER(TRIM(%s))""",
+                    (usuario_id, categoria),
+                )
+                num_vistas, num_clics = cursor.fetchone()
     except psycopg2.Error as exc:
         raise HTTPException(status_code=503, detail="No fue posible calcular features") from exc
 
@@ -306,8 +317,8 @@ def crear_prediccion(payload: dict[str, Any]) -> dict[str, Any]:
     ticket_promedio = ticket_promedio_raw if ticket_promedio_raw > 0 else 0.0
 
     features = {
-        "num_vistas_categoria": 0,
-        "num_clics_categoria": 0,
+        "num_vistas_categoria": int(num_vistas or 0),
+        "num_clics_categoria": int(num_clics or 0),
         "num_compras_categoria": num_compras,
         "total_gastado_categoria": total_gastado,
         "dias_ultima_compra": max(dias_ultima, 0),

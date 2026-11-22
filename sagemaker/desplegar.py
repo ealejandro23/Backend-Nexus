@@ -29,6 +29,10 @@ TRATADOS = os.path.join(RAIZ, "datos", "datos_tratados")
 CRUDOS = os.path.join(RAIZ, "datos", "crudos")
 CRUDOS_URL = "https://raw.githubusercontent.com/ealejandro23/Microservicio-IA/main/datos/crudos/{}.csv"
 ESTADO = os.path.join(RAIZ, "sagemaker", "estado.json")
+# Sin num_compras_categoria, total_gastado_categoria ni dias_ultima_compra: la etiqueta
+# (propension_compra = compró en la categoría) se deriva de esas columnas, así que usarlas es fuga.
+COLUMNAS = ["num_vistas_categoria", "num_clics_categoria", "frecuencia_compra",
+            "ticket_promedio", "edad", "acepta_marketing"]
 
 
 def paso(texto):
@@ -53,7 +57,7 @@ def csv_xgboost():
     """XGBoost integrado: etiqueta en la primera columna, sin encabezado."""
     import pandas as pd
 
-    columnas = json.load(open(os.path.join(TRATADOS, "feature_cols.json"), encoding="utf-8"))
+    columnas = COLUMNAS
     salidas = {}
     for parte, nombre in (("train", "train"), ("test", "validation")):
         x = pd.read_csv(os.path.join(TRATADOS, f"X_{parte}.csv"))[columnas]
@@ -121,7 +125,10 @@ def main():
     )
     esperar(lambda: sm.describe_training_job(TrainingJobName=trabajo), "TrainingJobStatus",
             {"Completed"}, {"Failed", "Stopped"}, cada=30)
-    artefacto = sm.describe_training_job(TrainingJobName=trabajo)["ModelArtifacts"]["S3ModelArtifacts"]
+    detalle = sm.describe_training_job(TrainingJobName=trabajo)
+    artefacto = detalle["ModelArtifacts"]["S3ModelArtifacts"]
+    for m in detalle.get("FinalMetricDataList", []):
+        print(f"   métrica {m['MetricName']}: {m['Value']:.4f}")
 
     paso(f"Creando endpoint serverless {ENDPOINT} ({args.memoria} MB, concurrencia {args.concurrencia})")
     modelo = f"nexo-modelo-{sufijo}"
@@ -141,7 +148,7 @@ def main():
 
     paso("Probando el endpoint (1.ª invocación = cold start)")
     rt = boto3.client("sagemaker-runtime", region_name=REGION)
-    fila = ",".join(["2", "0", "0", "59990", "20", "4", "35000", "34", "1"])
+    fila = ",".join(["3", "1", "4", "35000", "34", "1"])
     for intento in (1, 2, 3):
         inicio = time.perf_counter()
         r = rt.invoke_endpoint(EndpointName=ENDPOINT, ContentType="text/csv", Accept="text/csv", Body=fila)
