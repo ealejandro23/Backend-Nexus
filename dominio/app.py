@@ -173,7 +173,7 @@ def predecir_modelo(features: dict[str, Any]) -> tuple[float, str, str, float, s
         try:
             prob = _invocar_sagemaker(features)
             latencia = (_time.perf_counter() - inicio) * 1000
-            return prob, f"sagemaker:{ENDPOINT_MODELO}", "sagemaker", round(latencia, 1), None
+            return prob, "sagemaker-xgboost", "sagemaker", round(latencia, 1), None
         except Exception as exc:  # timeout (cold start), throttling, credenciales, etc.
             motivo = f"{type(exc).__name__}: {str(exc)[:160]}"
 
@@ -352,7 +352,7 @@ def crear_prediccion(payload: dict[str, Any]) -> dict[str, Any]:
             with connection.cursor() as cursor:
                 cursor.execute(
                     "INSERT INTO predicciones (usuario_id, sku, categoria, prediccion, propension, version_modelo, tiempo_ms) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
-                    (usuario_id, "N/A", categoria, prob, "alta" if prob >= 0.7 else "media" if prob >= 0.4 else "baja", version_modelo, ia_resp.get("tiempo_ms", 0)),
+                    (usuario_id, "N/A", categoria, prob, "alta" if prob >= 0.7 else "media" if prob >= 0.4 else "baja", str(version_modelo)[:20], ia_resp.get("tiempo_ms", 0)),
                 )
                 pred_id = cursor.fetchone()[0]
             connection.commit()
