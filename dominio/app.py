@@ -1,9 +1,12 @@
 import os
+import threading
+from contextlib import contextmanager
 from typing import Any
 
 import psycopg2
 from fastapi import FastAPI, HTTPException, Query
 from psycopg2.extras import RealDictCursor
+from psycopg2.pool import ThreadedConnectionPool
 
 app = FastAPI(
     title="Nexus Retail - Dominio de recomendaciones",
@@ -87,8 +90,15 @@ LIMIT %s
 """
 
 
-def get_connection():
-    return psycopg2.connect(
+# Pool de conexiones: abrir una conexión nueva por consulta (autenticación incluida) era el
+# principal gasto de CPU de PostgreSQL en la prueba de carga. Ahora se reutilizan.
+_pool = None
+_pool_lock = threading.Lock()
+
+
+def _crear_pool():
+    return ThreadedConnectionPool(
+        1, int(os.getenv("DB_POOL_MAX", "20")),
         host=os.getenv("DB_HOST", "localhost"),
         port=int(os.getenv("DB_PORT", "5432")),
         dbname=os.getenv("DB_NAME", "nexus_retail"),
@@ -96,6 +106,29 @@ def get_connection():
         password=os.getenv("DB_PASSWORD", "nexus"),
         connect_timeout=3,
     )
+
+
+@contextmanager
+def get_connection():
+    """Conexión del pool; al salir hace commit (o rollback si hubo error) y la devuelve."""
+    global _pool
+    with _pool_lock:
+        if _pool is None:
+            _pool = _crear_pool()
+    conn = _pool.getconn()
+    try:
+        if conn.closed:  # la base se reinició: se descarta y se pide otra
+            _pool.putconn(conn, close=True)
+            conn = _pool.getconn()
+        with conn:
+            yield conn
+    except (psycopg2.OperationalError, psycopg2.InterfaceError):
+        _pool.putconn(conn, close=True)
+        conn = None
+        raise
+    finally:
+        if conn is not None:
+            _pool.putconn(conn)
 
 
 @app.get("/health")
