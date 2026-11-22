@@ -69,7 +69,7 @@ popularity AS (
     WHERE LOWER(TRIM(estado)) = 'pagado'
     GROUP BY sku
 )
-SELECT p.sku, p.nombre, p.categoria,
+SELECT p.sku, p.nombre, p.categoria, p.marca, p.precio_lista,
        COALESCE(cp.score, 0) + COALESCE(pop.purchases, 0) * 0.01
        + CASE
            WHEN context_product.categoria IS NOT NULL
@@ -250,13 +250,42 @@ def listar_categorias() -> list[str]:
     return [r[0] for r in rows if r[0]]
 
 
+@app.get("/usuarios/{usuario_id}")
+def perfil_usuario(usuario_id: str) -> dict[str, Any]:
+    """Perfil del cliente para el front (sin datos personales: no hay nombre, correo ni RUT en la base)."""
+    try:
+        with get_connection() as connection:
+            with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute(
+                    """SELECT u.usuario_id, u.region, u.comuna, u.edad, u.acepta_marketing,
+                              COUNT(DISTINCT t.pedido_id) FILTER (WHERE LOWER(TRIM(t.estado)) = 'pagado') AS pedidos,
+                              COALESCE(SUM(t.total) FILTER (WHERE LOWER(TRIM(t.estado)) = 'pagado'), 0) AS total_gastado
+                       FROM usuarios u LEFT JOIN transacciones t ON t.usuario_id = u.usuario_id
+                       WHERE u.usuario_id = %s
+                       GROUP BY u.usuario_id, u.region, u.comuna, u.edad, u.acepta_marketing""",
+                    (usuario_id,),
+                )
+                fila = cursor.fetchone()
+    except psycopg2.Error as exc:
+        raise HTTPException(status_code=503, detail="No fue posible consultar el cliente") from exc
+    if fila is None:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    total = float(fila["total_gastado"] or 0)
+    return {
+        "usuario_id": fila["usuario_id"], "region": fila["region"], "comuna": fila["comuna"],
+        "edad": int(fila["edad"]) if fila["edad"] is not None else None,
+        "acepta_marketing": int(fila["acepta_marketing"] or 0) == 1,
+        "pedidos": int(fila["pedidos"] or 0), "total_gastado": total if total == total else 0.0,
+    }
+
+
 @app.get("/usuarios/{usuario_id}/historial")
 def historial_usuario(usuario_id: str) -> list[dict[str, Any]]:
     try:
         with get_connection() as connection:
             with connection.cursor(cursor_factory=RealDictCursor) as cursor:
                 cursor.execute(
-                    "SELECT t.sku, p.nombre AS producto, p.categoria, t.fecha, t.cantidad, t.total, t.estado FROM transacciones t LEFT JOIN productos p ON t.sku = p.sku WHERE t.usuario_id = %s ORDER BY t.fecha DESC LIMIT 20",
+                    "SELECT t.sku, p.nombre AS producto, p.categoria, t.fecha, t.cantidad, t.total, t.estado FROM transacciones t LEFT JOIN productos p ON t.sku = p.sku WHERE t.usuario_id = %s ORDER BY t.fecha DESC NULLS LAST LIMIT 20",
                     (usuario_id,),
                 )
                 rows = cursor.fetchall()
@@ -594,6 +623,9 @@ def recomendaciones(
                 "sku": product["sku"],
                 "nombre": product["nombre"],
                 "categoria": product["categoria"],
+                "marca": product.get("marca"),
+                "precio": (float(product["precio_lista"]) if product.get("precio_lista") is not None
+                           and product["precio_lista"] == product["precio_lista"] else None),
                 "score": round(float(product["score"]), 4),
             }
             for product in products
