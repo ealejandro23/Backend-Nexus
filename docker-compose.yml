@@ -101,7 +101,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.25'
+          cpus: '0.5'
           memory: 64M
 
   # ===========================================================================
@@ -228,7 +228,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.25'
+          cpus: '0.5'
           memory: 256M
 
   # ===========================================================================
@@ -258,7 +258,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.25'
+          cpus: '1.0'   # medido con Locust: con 0.25 la base era el cuello de botella
           memory: 256M
 
   # ===========================================================================
