@@ -210,19 +210,62 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  build-and-push-dominio:
+    name: Imagen dominio
+    needs: [test-campanas, test-datos]
+    runs-on: ubuntu-latest
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      startsWith(github.ref, 'refs/tags/ep3')
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Metadatos
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/dominio
+          tags: |
+            type=sha,prefix=sha-
+            type=raw,value=latest
+            type=ref,event=tag
+
+      - name: Build y push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./dominio/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   # ===========================================================================
   # TAG EP3 - publica el tag estable que consume docker-compose.yml
   # ===========================================================================
   tag-ep3:
     name: Tag ep3 (${{ matrix.image }})
-    needs: [build-and-push-backend, build-and-push-campanas, build-and-push-edge]
+    needs: [build-and-push-backend, build-and-push-campanas, build-and-push-edge, build-and-push-dominio]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/ep3')
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        image: [backend, campanas, edge]
+        image: [backend, campanas, edge, dominio]
     steps:
       - name: Login GHCR
         uses: docker/login-action@v3

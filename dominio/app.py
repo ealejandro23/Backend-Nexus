@@ -116,6 +116,80 @@ def health() -> dict[str, str]:
 
 IA_SERVICE_URL = os.getenv("IA_SERVICE_URL", "http://ia:8000")
 
+# =============================================================================
+# MODELO EN SAGEMAKER (endpoint serverless) CON RESERVA
+# POST /predicciones invoca el endpoint; si no responde en TIMEOUT_MODELO_MS
+# (cold start, throttling o endpoint no configurado), usa la reserva: el modelo
+# local del servicio ia. La respuesta indica el origen y la latencia.
+# =============================================================================
+ENDPOINT_MODELO = os.getenv("ENDPOINT_MODELO", "")
+TIMEOUT_MODELO_MS = int(os.getenv("TIMEOUT_MODELO_MS", "200"))
+AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+# Mismo orden que datos/datos_tratados/feature_cols.json (con el que se entrena en SageMaker)
+COLUMNAS_MODELO = [
+    "num_compras_categoria", "num_vistas_categoria", "num_clics_categoria",
+    "total_gastado_categoria", "dias_ultima_compra", "frecuencia_compra",
+    "ticket_promedio", "edad", "acepta_marketing",
+]
+_cliente_sagemaker = None
+
+
+def _sagemaker():
+    global _cliente_sagemaker
+    if _cliente_sagemaker is None:
+        import boto3
+        from botocore.config import Config
+
+        _cliente_sagemaker = boto3.client(
+            "sagemaker-runtime",
+            region_name=AWS_REGION,
+            config=Config(
+                connect_timeout=1,
+                read_timeout=max(TIMEOUT_MODELO_MS / 1000, 0.05),
+                retries={"total_max_attempts": 1},
+            ),
+        )
+    return _cliente_sagemaker
+
+
+def _invocar_sagemaker(features: dict[str, Any]) -> float:
+    fila = ",".join(str(float(features[c])) for c in COLUMNAS_MODELO)
+    respuesta = _sagemaker().invoke_endpoint(
+        EndpointName=ENDPOINT_MODELO,
+        ContentType="text/csv",
+        Accept="text/csv",
+        Body=fila.encode("utf-8"),
+    )
+    return float(respuesta["Body"].read().decode("utf-8").strip().split()[0])
+
+
+def predecir_modelo(features: dict[str, Any]) -> tuple[float, str, str, float, str | None]:
+    """Devuelve (probabilidad, version_modelo, origen, latencia_ms, motivo_reserva)."""
+    import time as _time
+
+    motivo = "ENDPOINT_MODELO no configurado"
+    if ENDPOINT_MODELO:
+        inicio = _time.perf_counter()
+        try:
+            prob = _invocar_sagemaker(features)
+            latencia = (_time.perf_counter() - inicio) * 1000
+            return prob, f"sagemaker:{ENDPOINT_MODELO}", "sagemaker", round(latencia, 1), None
+        except Exception as exc:  # timeout (cold start), throttling, credenciales, etc.
+            motivo = f"{type(exc).__name__}: {str(exc)[:160]}"
+
+    import httpx as _httpx
+
+    inicio = _time.perf_counter()
+    try:
+        r = _httpx.post(f"{IA_SERVICE_URL}/predict", json=features, timeout=10.0)
+        r.raise_for_status()
+        ia_resp = r.json()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Modelo no disponible (SageMaker y reserva): {exc}")
+    latencia = (_time.perf_counter() - inicio) * 1000
+    return (float(ia_resp.get("prediccion", 0.0)), str(ia_resp.get("version_modelo", "1.0.0")),
+            "reserva", round(latencia, 1), motivo)
+
 
 @app.get("/usuarios")
 def listar_usuarios() -> list[dict[str, Any]]:
@@ -243,17 +317,8 @@ def crear_prediccion(payload: dict[str, Any]) -> dict[str, Any]:
         "acepta_marketing": int(user["acepta_marketing"] or 0),
     }
 
-    try:
-        import httpx as _httpx
-
-        r = _httpx.post(f"{IA_SERVICE_URL}/predict", json=features, timeout=10.0)
-        r.raise_for_status()
-        ia_resp = r.json()
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Servicio de IA no disponible: {exc}")
-
-    prob = float(ia_resp.get("prediccion", 0.0))
-    version_modelo = ia_resp.get("version_modelo", "1.0.0")
+    prob, version_modelo, origen, latencia_ms, motivo_reserva = predecir_modelo(features)
+    ia_resp = {"tiempo_ms": latencia_ms}
 
     # =============================================================================
     # CORRECCIÓN DE NEGOCIO: el modelo de IA tiene problemas de calibración y
@@ -299,6 +364,9 @@ def crear_prediccion(payload: dict[str, Any]) -> dict[str, Any]:
         "prediccion": 1 if prob >= 0.6 else 0,
         "version_modelo": version_modelo,
         "prediccion_id": pred_id,
+        "origen": origen,
+        "latencia_ms": latencia_ms,
+        "motivo_reserva": motivo_reserva,
         "instancia": None,
     }
 
