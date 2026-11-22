@@ -91,6 +91,8 @@ LIMIT %s
 """
 
 
+# Nota: en los datos, 2.607 transacciones sin precio tienen total = NaN; las sumas y promedios usan
+# NULLIF(total, 'NaN') para no contaminar el resultado (antes daban NaN y se mostraban como 0).
 # Pool de conexiones: abrir una conexión nueva por consulta (autenticación incluida) era el
 # principal gasto de CPU de PostgreSQL en la prueba de carga. Ahora se reutilizan.
 _pool = None
@@ -236,7 +238,7 @@ def listar_usuarios() -> list[dict[str, Any]]:
                     """SELECT u.usuario_id, u.region, u.comuna, u.edad, u.acepta_marketing,
                               COALESCE(t.pedidos, 0) AS pedidos, COALESCE(t.total, 0) AS total_gastado
                        FROM usuarios u
-                       LEFT JOIN (SELECT usuario_id, COUNT(DISTINCT pedido_id) AS pedidos, SUM(total) AS total
+                       LEFT JOIN (SELECT usuario_id, COUNT(DISTINCT pedido_id) AS pedidos, SUM(NULLIF(total, 'NaN'::float)) AS total
                                   FROM transacciones WHERE LOWER(TRIM(estado)) = 'pagado'
                                   GROUP BY usuario_id) t ON t.usuario_id = u.usuario_id
                        ORDER BY u.usuario_id"""
@@ -280,7 +282,7 @@ def perfil_usuario(usuario_id: str) -> dict[str, Any]:
                 cursor.execute(
                     """SELECT u.usuario_id, u.region, u.comuna, u.edad, u.acepta_marketing,
                               COUNT(DISTINCT t.pedido_id) FILTER (WHERE LOWER(TRIM(t.estado)) = 'pagado') AS pedidos,
-                              COALESCE(SUM(t.total) FILTER (WHERE LOWER(TRIM(t.estado)) = 'pagado'), 0) AS total_gastado
+                              COALESCE(SUM(NULLIF(t.total, 'NaN'::float)) FILTER (WHERE LOWER(TRIM(t.estado)) = 'pagado'), 0) AS total_gastado
                        FROM usuarios u LEFT JOIN transacciones t ON t.usuario_id = u.usuario_id
                        WHERE u.usuario_id = %s
                        GROUP BY u.usuario_id, u.region, u.comuna, u.edad, u.acepta_marketing""",
@@ -350,7 +352,7 @@ def crear_prediccion(payload: dict[str, Any]) -> dict[str, Any]:
                 )
                 num_compras = cursor.fetchone()[0] or 0
                 cursor.execute(
-                    """SELECT COALESCE(SUM(t.total), 0) FROM transacciones t
+                    """SELECT COALESCE(SUM(NULLIF(t.total, 'NaN'::float)), 0) FROM transacciones t
                        JOIN productos p ON t.sku = p.sku
                        WHERE t.usuario_id = %s AND LOWER(TRIM(t.estado)) = 'pagado'
                          AND LOWER(TRIM(p.categoria)) = LOWER(TRIM(%s))""",
@@ -374,7 +376,7 @@ def crear_prediccion(payload: dict[str, Any]) -> dict[str, Any]:
                 )
                 frecuencia = cursor.fetchone()[0] or 0
                 cursor.execute(
-                    "SELECT COALESCE(AVG(total), 0) FROM transacciones WHERE usuario_id = %s AND LOWER(TRIM(estado)) = 'pagado'",
+                    "SELECT COALESCE(AVG(NULLIF(total, 'NaN'::float)), 0) FROM transacciones WHERE usuario_id = %s AND LOWER(TRIM(estado)) = 'pagado'",
                     (usuario_id,),
                 )
                 ticket_promedio_raw = float(cursor.fetchone()[0] or 0)
