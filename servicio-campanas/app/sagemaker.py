@@ -8,6 +8,7 @@ y marca la campaña como degradada. Así la ruta de campañas sigue operativa.
 from __future__ import annotations
 
 import asyncio
+import os
 import json
 import logging
 import time
@@ -97,13 +98,13 @@ class SageMakerRecommender:
 
     async def health(self) -> tuple[str, str, float]:
         inicio = time.monotonic()
-        if not self.settings.sagemaker_endpoint_name:
+        # El endpoint del modelo lo invoca el dominio (ENDPOINT_MODELO); aquí solo se informa su estado.
+        endpoint = self.settings.sagemaker_endpoint_name or os.getenv("ENDPOINT_MODELO", "")
+        if not endpoint:
             return "no_configurado", "SAGEMAKER_ENDPOINT_NAME no configurado", 0.0
 
         def _describe() -> str:
-            respuesta = self._admin().describe_endpoint(
-                EndpointName=self.settings.sagemaker_endpoint_name
-            )
+            respuesta = self._admin().describe_endpoint(EndpointName=endpoint)
             return str(respuesta.get("EndpointStatus", "Desconocido"))
 
         try:
@@ -118,7 +119,7 @@ class SageMakerRecommender:
 
         latencia = (time.monotonic() - inicio) * 1000
         if estado == "InService":
-            return "ok", f"endpoint {self.settings.sagemaker_endpoint_name} InService", latencia
+            return "ok", f"endpoint {endpoint} InService", latencia
         return "degradado", f"endpoint en estado {estado}", latencia
 
     async def recomendar(
