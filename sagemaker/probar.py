@@ -10,7 +10,7 @@ import time
 import boto3
 
 REGION, ENDPOINT = "us-east-1", "nexo-recomendacion"
-FILA = "2,0,0,59990,20,4,35000,34,1"
+FILA = "3,1,4,35000,34,1"  # vistas, clics, frecuencia, ticket, edad, marketing
 rt = boto3.client("sagemaker-runtime", region_name=REGION)
 
 
