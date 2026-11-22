@@ -44,7 +44,7 @@ def preparar_datos():
         destino = os.path.join(CRUDOS, f"{nombre}.csv")
         if not os.path.exists(destino):
             urllib.request.urlretrieve(CRUDOS_URL.format(nombre), destino)
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "--user",
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q",
                            "pandas", "numpy", "scikit-learn", "joblib"])
     subprocess.check_call([sys.executable, os.path.join(RAIZ, "datos", "preparar.py")])
 
