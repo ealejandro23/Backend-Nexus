@@ -565,16 +565,29 @@ def recomendaciones(
     sku: str | None = Query(default=None, min_length=1),
     limite: int = Query(default=8, ge=1, le=24),
 ) -> dict[str, Any]:
+    # RN2: perfilar exige consentimiento explícito. Sin acepta_marketing = 1 no se usa el historial
+    # del cliente y la lista son los más vendidos (origen "regla").
+    origen, motivo = ("personalizado", None) if usuario_id else ("regla", "Sin cliente: más vendidos")
     try:
         with get_connection() as connection:
             with connection.cursor(cursor_factory=RealDictCursor) as cursor:
-                cursor.execute(RECOMMENDATIONS_QUERY, (usuario_id, sku, limite))
+                if usuario_id:
+                    cursor.execute("SELECT acepta_marketing FROM usuarios WHERE usuario_id = %s", (usuario_id,))
+                    fila = cursor.fetchone()
+                    if not fila or int(fila["acepta_marketing"] or 0) != 1:
+                        origen = "regla"
+                        motivo = ("El cliente no dio consentimiento para usar su historial (RN2)" if fila
+                                  else "Cliente no registrado")
+                cursor.execute(RECOMMENDATIONS_QUERY,
+                               (usuario_id if origen == "personalizado" else None, sku, limite))
                 products = cursor.fetchall()
     except psycopg2.Error as exc:
         raise HTTPException(status_code=503, detail="No fue posible consultar recomendaciones") from exc
 
     return {
         "usuario_id": usuario_id,
+        "origen": origen,
+        "motivo": motivo,
         "sku_consultado": sku,
         "recomendaciones": [
             {
