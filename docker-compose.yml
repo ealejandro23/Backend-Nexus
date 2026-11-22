@@ -171,6 +171,9 @@ services:
     environment:
       <<: *common-env
       IA_SERVICE_URL: http://ia:8000
+      # Modelo en SageMaker serverless; si no responde en TIMEOUT_MODELO_MS se usa ia (reserva)
+      ENDPOINT_MODELO: ${ENDPOINT_MODELO:-}
+      TIMEOUT_MODELO_MS: ${TIMEOUT_MODELO_MS:-200}
     depends_on:
       db:
         condition: service_healthy
@@ -203,6 +206,9 @@ services:
     environment:
       <<: *common-env
       IA_SERVICE_URL: http://ia:8000
+      # Modelo en SageMaker serverless; si no responde en TIMEOUT_MODELO_MS se usa ia (reserva)
+      ENDPOINT_MODELO: ${ENDPOINT_MODELO:-}
+      TIMEOUT_MODELO_MS: ${TIMEOUT_MODELO_MS:-200}
     depends_on:
       db:
         condition: service_healthy

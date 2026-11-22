@@ -55,3 +55,4 @@ htmlcov/
 __pycache__/
 
 # Docker
+sagemaker/estado.json
