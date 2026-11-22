@@ -231,11 +231,32 @@ def listar_usuarios() -> list[dict[str, Any]]:
     try:
         with get_connection() as connection:
             with connection.cursor(cursor_factory=RealDictCursor) as cursor:
-                cursor.execute("SELECT usuario_id, region FROM usuarios ORDER BY usuario_id")
+                # Datos para elegir al cliente en el front sin depender del código (sin datos personales).
+                cursor.execute(
+                    """SELECT u.usuario_id, u.region, u.comuna, u.edad, u.acepta_marketing,
+                              COALESCE(t.pedidos, 0) AS pedidos, COALESCE(t.total, 0) AS total_gastado
+                       FROM usuarios u
+                       LEFT JOIN (SELECT usuario_id, COUNT(DISTINCT pedido_id) AS pedidos, SUM(total) AS total
+                                  FROM transacciones WHERE LOWER(TRIM(estado)) = 'pagado'
+                                  GROUP BY usuario_id) t ON t.usuario_id = u.usuario_id
+                       ORDER BY u.usuario_id"""
+                )
                 rows = cursor.fetchall()
     except psycopg2.Error as exc:
         raise HTTPException(status_code=503, detail="No fue posible consultar usuarios") from exc
-    return [{"usuario_id": r["usuario_id"], "region": r["region"]} for r in rows]
+
+    def numero(valor) -> float:
+        try:
+            v = float(valor or 0)
+        except (TypeError, ValueError):
+            return 0.0
+        return v if v == v else 0.0
+
+    return [{"usuario_id": r["usuario_id"], "region": r["region"], "comuna": r["comuna"],
+             "edad": int(r["edad"]) if r["edad"] is not None else None,
+             "acepta_marketing": int(r["acepta_marketing"] or 0) == 1,
+             "pedidos": int(r["pedidos"] or 0), "total_gastado": round(numero(r["total_gastado"]))}
+            for r in rows]
 
 
 @app.get("/categorias")
