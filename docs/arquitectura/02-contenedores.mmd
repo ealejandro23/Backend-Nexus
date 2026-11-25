@@ -1,0 +1,34 @@
+C4Container
+  title Nivel 2 - Contenedores de Nexo Recommender (Nexus Retail)
+
+  Person(cliente, "Cliente final", "Navega y compra en la tienda online de Nexus Retail")
+  Person(marketing, "Equipo de marketing", "Fija y veta productos y revisa la conversion atribuida")
+  Person(cumplimiento, "Encargado de cumplimiento", "Gestiona consentimientos y pedidos de exclusion del historial")
+
+  System_Ext(shopify, "Shopify Plus", "Tienda, catalogo, pedidos y checkout")
+  System_Ext(erp, "ERP Defontana", "Fuente oficial del stock")
+  System_Ext(mailchimp, "Mailchimp", "Envio de campanas de email")
+  Container_Ext(sagemaker, "Endpoint del modelo", "XGBoost en SageMaker serverless (AWS)", "Modelo principal de propension de compra")
+
+  Container_Boundary(nexo, "Nexo Recommender") {
+    Container(gateway, "API Gateway", "Nginx 1.27", "Unica puerta de entrada: enruta, balancea entre replicas y corta con timeout de 200 ms")
+    Container(front, "Front", "Python 3.12 + FastAPI (uvicorn)", "Panel web para marketing y cumplimiento")
+    Container(dominio, "Servicio de dominio", "Python 3.11 + FastAPI + pandas (x2 replicas)", "Reglas de negocio: stock, vetos, consentimientos y registro de predicciones")
+    Container(ia, "Servicio de IA", "Python + FastAPI + PyTorch CPU", "Calcula la propension de compra con el modelo RecommenderNet")
+    Container(carga, "Carga de datos", "Python 3.11 + pandas + psycopg2 (job one-shot)", "Limpia los CSV y los carga en la base de datos")
+    ContainerDb(db, "Base de datos", "PostgreSQL 15", "Guarda productos, usuarios, transacciones y predicciones")
+  }
+
+  Rel(cliente, shopify, "Navega y compra", "HTTPS")
+  Rel(shopify, gateway, "Pide recomendaciones para ficha, home y carrito", "REST/JSON")
+  Rel(marketing, gateway, "Fija slots, veta categorias y ve el panel", "HTTPS")
+  Rel(cumplimiento, gateway, "Registra exclusiones y consentimientos", "HTTPS")
+  Rel(gateway, front, "Sirve el panel", "HTTP")
+  Rel(gateway, dominio, "POST /predicciones, balanceado entre 2 replicas", "REST/JSON")
+  Rel(dominio, ia, "POST /predict con timeout de 200 ms", "REST/JSON")
+  Rel(dominio, db, "Lee y escribe", "SQL/TCP 5432")
+  Rel(carga, db, "Inserta datos limpios", "SQL/TCP 5432")
+  Rel(erp, carga, "Entrega el stock cada 30 min", "CSV")
+  Rel(dominio, shopify, "Lee el catalogo de productos", "Storefront API GraphQL")
+  Rel(dominio, mailchimp, "Entrega recomendaciones por cliente", "REST")
+  Rel(dominio, sagemaker, "invoke_endpoint con timeout de 200 ms", "HTTPS/CSV")

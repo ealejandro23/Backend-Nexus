@@ -1,0 +1,17 @@
+C4Dynamic
+  title Vista de tiempo de ejecucion - Prediccion con SageMaker y la reserva caidos
+
+  Container(gateway, "API Gateway", "Nginx 1.27", "Unica puerta de entrada")
+  Container(dominio, "Servicio de dominio", "Python 3.11 + FastAPI", "Orquesta la prediccion")
+  Container_Ext(sagemaker, "Endpoint del modelo", "XGBoost en SageMaker serverless", "No responde: cold start")
+  Container(ia, "Servicio de IA", "Python + FastAPI + PyTorch CPU", "Reserva: tambien caida")
+  Container(front, "Front", "Python 3.12 + FastAPI", "Muestra el resultado al usuario")
+
+  Rel(gateway, dominio, "1. POST /predicciones", "REST/JSON")
+  Rel(dominio, sagemaker, "2. invoke_endpoint: sin respuesta, se agotan los 200 ms (1 intento)", "HTTPS/CSV")
+  Rel(dominio, ia, "3. Reserva POST /predict: falla la conexion o se agotan los 10 s", "REST/JSON")
+  Rel(dominio, gateway, "4. 503 Modelo no disponible (SageMaker y reserva)", "REST/JSON")
+  Rel(gateway, front, "5. Recibe el 503: el usuario ve la lista generica de mas vendidos", "HTTP")
+  UpdateRelStyle(dominio, sagemaker, $textColor="red", $offsetY="-40")
+  UpdateRelStyle(dominio, ia, $textColor="red", $offsetY="40")
+  UpdateRelStyle(dominio, gateway, $textColor="red", $offsetY="-20")

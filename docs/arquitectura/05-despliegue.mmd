@@ -1,0 +1,29 @@
+C4Deployment
+  title Despliegue de Nexo Recommender (EP3)
+
+  Deployment_Node(github, "GitHub", "github.com") {
+    Container(registro, "Registro de imagenes", "GitHub Container Registry (ghcr.io)", "Imagenes de gateway, front, dominio, ia y carga")
+  }
+
+  Deployment_Node(aws, "AWS Academy Learner Lab", "Region us-east-1") {
+    Deployment_Node(ec2, "Instancia EC2", "t3.medium (2 vCPU, 4 GB) · Amazon Linux 2023 · IP elastica") {
+      Deployment_Node(docker, "Docker Engine", "Docker Compose, red nexo-network") {
+        Container(gateway, "API Gateway", "Nginx 1.27", "Puerto 8080")
+        Container(front, "Front", "Python 3.12 + FastAPI", "Panel web")
+        Container(dominio1, "Servicio de dominio (replica 1)", "Python 3.11 + FastAPI", "Puerto 8000")
+        Container(dominio2, "Servicio de dominio (replica 2)", "Python 3.11 + FastAPI", "Puerto 8000")
+        Container(ia, "Servicio de IA", "Python + FastAPI + PyTorch CPU", "Modelo de reserva")
+        ContainerDb(db, "Base de datos", "PostgreSQL 15 + volumen db-data", "Estado persistente")
+      }
+    }
+    Deployment_Node(sm, "Amazon SageMaker", "Endpoint serverless") {
+      Container(modelo, "Endpoint del modelo", "XGBoost", "Modelo principal")
+    }
+  }
+
+  Rel(gateway, dominio1, "Balancea", "HTTP")
+  Rel(gateway, dominio2, "Balancea", "HTTP")
+  Rel(dominio1, modelo, "invoke_endpoint, timeout 200 ms", "HTTPS")
+  Rel(dominio1, ia, "Reserva", "HTTP")
+  Rel(dominio1, db, "SQL", "TCP 5432")
+  Rel(docker, registro, "docker pull de las imagenes", "HTTPS")

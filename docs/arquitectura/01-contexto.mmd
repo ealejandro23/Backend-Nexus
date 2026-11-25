@@ -1,0 +1,21 @@
+C4Context
+  title Nivel 1 - Contexto de Nexo Recommender (Nexus Retail)
+
+  Person(cliente, "Cliente final", "Navega y compra en la tienda online de Nexus Retail")
+  Person(marketing, "Equipo de marketing", "Fija y veta productos y revisa la conversion atribuida")
+  Person(cumplimiento, "Encargado de cumplimiento", "Gestiona consentimientos y pedidos de exclusion del historial")
+
+  System(nexo, "Nexo Recommender", "Recomienda productos segun la propension de compra de cada cliente")
+
+  System_Ext(shopify, "Shopify Plus", "Tienda, catalogo, pedidos y checkout")
+  System_Ext(erp, "ERP Defontana", "Fuente oficial del stock")
+  System_Ext(mailchimp, "Mailchimp", "Envio de campanas de email")
+
+  Rel(cliente, shopify, "Navega, ve recomendaciones y compra", "HTTPS")
+  Rel(shopify, nexo, "Pide recomendaciones para ficha, home y carrito", "REST/JSON")
+  Rel(nexo, shopify, "Lee el catalogo de productos", "Storefront API GraphQL")
+  Rel(shopify, nexo, "Envia eventos de pedidos y navegacion", "Webhooks REST/JSON y JSON por lote a S3")
+  Rel(erp, nexo, "Sincroniza el stock cada 30 min", "CSV")
+  Rel(nexo, mailchimp, "Entrega recomendaciones por cliente para campanas", "REST")
+  Rel(marketing, nexo, "Fija slots, veta categorias y ve el panel", "HTTPS")
+  Rel(cumplimiento, nexo, "Registra exclusiones y consentimientos", "HTTPS")

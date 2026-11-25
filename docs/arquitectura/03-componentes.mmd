@@ -1,0 +1,27 @@
+C4Component
+  title Nivel 3 - Componentes del Servicio de dominio (Nexo Recommender)
+
+  Container(gateway, "API Gateway", "Nginx 1.27", "Unica puerta de entrada; balancea entre las 2 replicas")
+  Container(ia, "Servicio de IA", "Python + FastAPI + PyTorch CPU", "Modelo local de reserva")
+  ContainerDb(db, "Base de datos", "PostgreSQL 15", "Productos, usuarios, transacciones y predicciones")
+  Container_Ext(sagemaker, "Endpoint del modelo", "XGBoost en SageMaker serverless (AWS)", "Modelo principal de propension de compra")
+
+  Container_Boundary(dominio, "Servicio de dominio") {
+    Component(rutas, "Rutas de la API", "FastAPI", "POST /predicciones, GET /api/recomendaciones, /usuarios, /metricas")
+    Component(salud, "Ruta GET /health", "FastAPI", "Responde 200 solo si logra hablar con la base de datos")
+    Component(orquestador, "Orquestador de prediccion", "Funcion predecir_modelo", "Intenta SageMaker y, si falla, usa la reserva; informa origen y latencia")
+    Component(cliente_sm, "Cliente de SageMaker", "boto3 sagemaker-runtime", "Timeout de lectura de 200 ms y 1 solo intento; cualquier error activa la reserva")
+    Component(cliente_ia, "Cliente del servicio de IA", "httpx", "POST /predict con timeout de 10 s; si tambien falla devuelve 503")
+    Component(repo, "Repositorio de datos", "psycopg2 ThreadedConnectionPool", "Pool de hasta 20 conexiones con connect_timeout de 3 s")
+  }
+
+  Rel(gateway, rutas, "POST /predicciones", "REST/JSON")
+  Rel(gateway, salud, "GET /health", "HTTP")
+  Rel(rutas, orquestador, "Pide la probabilidad de compra")
+  Rel(orquestador, cliente_sm, "Primero intenta")
+  Rel(orquestador, cliente_ia, "Si SageMaker falla o tarda")
+  Rel(cliente_sm, sagemaker, "invoke_endpoint", "HTTPS/CSV")
+  Rel(cliente_ia, ia, "POST /predict", "REST/JSON")
+  Rel(rutas, repo, "Lee perfiles y guarda predicciones")
+  Rel(salud, repo, "Prueba la conexion")
+  Rel(repo, db, "Consultas e INSERT", "SQL/TCP 5432")
